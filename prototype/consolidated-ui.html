@@ -1,0 +1,3954 @@
+<!-- PROTOTYPE (THROWAWAY): Three structurally distinct UI variants (A: Workbench Sidebar, B: Full-Width Command Bar, C: Split Triage + Watchlist Dock) for Unified Marketplace Search v1, switchable via ?variant=A|B|C and the bottom bar. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unified Marketplace Search — UI Prototype</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --surface-muted: #f8fafc;
+      --surface-subtle: #eef2f6;
+      --border: #dfe4ec;
+      --border-strong: #c4cdd9;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --text-soft: #64748b;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-soft: #eff6ff;
+      --success: #15803d;
+      --success-bg: #f0fdf4;
+      --success-border: #bbf7d0;
+      --warn: #b45309;
+      --warn-bg: #fffbeb;
+      --warn-border: #fde68a;
+      --danger: #b91c1c;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --skip-bg: #f1f5f9;
+      --skip-text: #475569;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+      --shadow-md: 0 6px 20px rgba(15, 23, 42, 0.09);
+      --shadow-lg: 0 14px 36px rgba(15, 23, 42, 0.16);
+      --ebay-bg: #eff6ff;
+      --ebay-fg: #1d4ed8;
+      --poshmark-bg: #fdf2f8;
+      --poshmark-fg: #9d174d;
+      --mercari-bg: #eef2ff;
+      --mercari-fg: #4338ca;
+      --facebook-bg: #ecfeff;
+      --facebook-fg: #0e7490;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    body {
+      margin: 0;
+      padding-bottom: 84px; /* space for floating bottom prototype switcher */
+      min-height: 100vh;
+    }
+
+    button, input, select {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .tabular {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* Shared UI primitives */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 500;
+      font-size: 13px;
+      line-height: 1.2;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--surface-muted);
+      border-color: #94a3b8;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: #ffffff;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #991b1b;
+      border-color: #991b1b;
+    }
+
+    .btn-ghost {
+      border-color: transparent;
+      background: transparent;
+      color: var(--text-muted);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      background: var(--surface-subtle);
+      color: var(--text);
+    }
+
+    .btn-sm {
+      padding: 4px 9px;
+      font-size: 12px;
+    }
+
+    .btn-xs {
+      padding: 3px 7px;
+      font-size: 11px;
+    }
+
+    .input, .select {
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      font-size: 13px;
+      min-width: 0;
+    }
+
+    .input:focus, .select:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+
+    .mp-ebay { background: var(--ebay-bg); color: var(--ebay-fg); }
+    .mp-poshmark { background: var(--poshmark-bg); color: var(--poshmark-fg); }
+    .mp-mercari { background: var(--mercari-bg); color: var(--mercari-fg); }
+    .mp-facebook { background: var(--facebook-bg); color: var(--facebook-fg); }
+
+    .diag-exact { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+    .diag-broadened { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+    .diag-skipped { background: var(--skip-bg); color: var(--skip-text); border: 1px solid var(--border); }
+    .diag-error { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+    .diag-streaming { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+    .new-badge {
+      background: #fbbf24;
+      color: #451a03;
+      border: 1px solid #d97706;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-pills {
+      display: flex;
+      gap: 4px;
+    }
+
+    .nav-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 11px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .nav-btn:hover {
+      background: var(--surface-subtle);
+      color: var(--text);
+    }
+
+    .nav-btn[aria-current="page"] {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: #bfdbfe;
+    }
+
+    .validation-msg {
+      color: var(--danger);
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 4px;
+    }
+
+    /* Thumbnails & broken placeholder */
+    .thumb-wrap {
+      position: relative;
+      background: var(--surface-subtle);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .thumb-wrap img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .thumb-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 8px;
+      text-align: center;
+      color: var(--text-soft);
+      background: repeating-linear-gradient(
+        -45deg,
+        #f8fafc,
+        #f8fafc 8px,
+        #f1f5f9 8px,
+        #f1f5f9 16px
+      );
+      border: 1px dashed var(--border-strong);
+      font-size: 11px;
+    }
+
+    /* Listing Card (used in A & B) */
+    .listing-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-sm);
+      transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .listing-card:hover {
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-md);
+    }
+
+    .listing-card .thumb-wrap {
+      aspect-ratio: 4 / 3;
+      width: 100%;
+    }
+
+    .card-top-overlay {
+      position: absolute;
+      inset: 8px 8px auto 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    .card-top-overlay > * {
+      pointer-events: auto;
+    }
+
+    .watch-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(15, 23, 42, 0.14);
+      background: rgba(255, 255, 255, 0.94);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+
+    .watch-toggle[aria-pressed="true"] {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #be123c;
+    }
+
+    .card-body {
+      padding: 11px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      flex: 1;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 13.5px;
+      font-weight: 600;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-price-row {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .price-main {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .ship-badge {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      background: var(--surface-subtle);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .ship-badge.ship-free {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .auction-meta {
+      font-size: 11.5px;
+      color: #9a3412;
+      background: #ffedd5;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+      align-self: flex-start;
+    }
+
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-soft);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      margin-top: auto;
+    }
+
+    .card-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--surface-subtle);
+      font-size: 12px;
+    }
+
+    /* Filter control helpers */
+    .filter-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filter-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-soft);
+    }
+
+    .check-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .toggle-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .toggle-pill[aria-pressed="true"] {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Marketplace toggle bar differentiation */
+    .mp-switch-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mp-switch-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-soft);
+      margin-right: 2px;
+    }
+
+    .mp-arm-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .mp-arm-btn[aria-pressed="true"] {
+      background: #0f172a;
+      border-color: #0f172a;
+      color: #ffffff;
+    }
+
+    /* Status cards */
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .status-card {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .status-card.status-failed {
+      border-color: var(--danger-border);
+      background: #fffafa;
+    }
+
+    .status-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-card-badges {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .status-count {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .fb-sweep-stop-btn {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border-radius: 999px;
+      border: 1px solid #a5f3fc;
+      background: #ecfeff;
+      color: #0e7490;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .fb-sweep-stop-btn .fb-stop-icon {
+      display: none;
+    }
+
+    .fb-sweep-stop-btn:hover,
+    .fb-sweep-stop-btn:focus-visible {
+      border-color: var(--danger-border);
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .fb-sweep-stop-btn:hover .fb-spinner-icon,
+    .fb-sweep-stop-btn:focus-visible .fb-spinner-icon {
+      display: none;
+    }
+
+    .fb-sweep-stop-btn:hover .fb-stop-icon,
+    .fb-sweep-stop-btn:focus-visible .fb-stop-icon {
+      display: block;
+    }
+
+    .fb-spinner-icon {
+      animation: fb-spin 0.9s linear infinite;
+    }
+
+    @keyframes fb-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status-info-btn {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-muted);
+      color: var(--text-soft);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .status-info-btn:hover,
+    .status-info-btn:focus-visible {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    [interestfor] {
+      --interest-delay-start: 0.15s;
+      interest-delay-start: var(--interest-delay-start);
+      --interest-delay-end: 0.1s;
+      interest-delay-end: var(--interest-delay-end);
+    }
+
+    .status-strip:has([interestfor]:is(:interest-source, .interest-source)) [interestfor] {
+      --interest-delay-start: 0s;
+    }
+
+    [popover].status-tooltip {
+      border: 1px solid #334155;
+      border-radius: var(--radius-sm);
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 8px 10px;
+      max-width: calc(100vw - 16px);
+      font-size: 12px;
+      line-height: 1.4;
+      box-shadow: var(--shadow-lg);
+      z-index: 900;
+    }
+
+    [popover].status-tooltip:is(:popover-open, .\:popover-open, .tooltip-open) {
+      display: block;
+    }
+
+    @supports (position-area: block-end) {
+      [popover].status-tooltip {
+        inset: auto;
+        margin: 6px 0;
+        position-area: block-end;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+      }
+      @supports (width: anchor-size(width)) {
+        [popover].status-tooltip {
+          width: anchor-size(width);
+          max-width: min(anchor-size(width), calc(100vw - 16px));
+        }
+      }
+    }
+
+    @supports not (position-area: block-end) {
+      [popover].status-tooltip {
+        position: fixed;
+        margin: 0;
+      }
+    }
+
+    .status-diag {
+      color: #f8fafc;
+      line-height: 1.4;
+    }
+
+    .status-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    /* Variant A: Workbench Sidebar */
+    .shell-a {
+      display: grid;
+      grid-template-columns: 296px minmax(0, 1fr);
+      min-height: calc(100vh - 84px);
+    }
+
+    .shell-a-sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .shell-a-main {
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      background: var(--accent);
+      display: inline-block;
+    }
+
+    .saved-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 368px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .saved-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 7px 9px;
+      background: var(--surface-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .saved-item.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .saved-item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 6px;
+    }
+
+    .saved-name-group {
+      display: flex;
+      align-items: flex-start;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .saved-run-btn {
+      text-align: left;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      font-weight: 600;
+      font-size: 12.5px;
+      color: var(--text);
+      min-width: 0;
+    }
+
+    .saved-run-btn:hover {
+      color: var(--accent);
+    }
+
+    .saved-icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-soft);
+    }
+
+    .saved-icon-btn:hover,
+    .saved-icon-btn:focus-visible {
+      background: var(--surface-subtle);
+      color: var(--text);
+    }
+
+    .saved-icon-delete:hover,
+    .saved-icon-delete:focus-visible {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .saved-meta-line {
+      font-size: 11px;
+      color: var(--text-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .grid-a {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+      gap: 14px;
+    }
+
+    /* Variant B: Full-Width Command Bar */
+    .shell-b-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .shell-b-row {
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 10px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .shell-b-row + .shell-b-row {
+      border-top: 1px solid var(--surface-subtle);
+      padding-top: 8px;
+      padding-bottom: 8px;
+      background: var(--surface-muted);
+    }
+
+    .shell-b-main {
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .grid-b {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+      gap: 12px;
+    }
+
+    /* Variant B Anchored Popovers (modern-web-guidance: viewport-aware-dropdowns) */
+    [popover].anchored-overlay {
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 14px;
+      box-shadow: var(--shadow-lg);
+      min-width: 280px;
+      max-width: min(380px, 92vw);
+      max-height: 75vh;
+      overflow-y: auto;
+    }
+
+    @supports (position-area: block-end) {
+      [popover].anchored-overlay {
+        inset: auto;
+        margin: 6px 0 0 0;
+        position-area: block-end span-inline-end;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+      }
+    }
+
+    @supports not (position-area: block-end) {
+      [popover].anchored-overlay {
+        position: fixed;
+        inset: auto 0 72px 0;
+        width: auto;
+        margin: 0 auto;
+      }
+    }
+
+    /* Variant C: Split Triage + Watchlist Dock */
+    .shell-c-topbar {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 10px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .shell-c-topbar .input, .shell-c-topbar .select {
+      background: #1e293b;
+      border-color: #334155;
+      color: #f8fafc;
+    }
+
+    .shell-c-topbar .btn-dark {
+      background: #1e293b;
+      border-color: #475569;
+      color: #f8fafc;
+    }
+
+    .shell-c-topbar .btn-dark:hover {
+      background: #334155;
+    }
+
+    .shell-c-body {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .triage-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .triage-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 9px 12px;
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .triage-row:hover {
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .triage-row .thumb-wrap {
+      width: 88px;
+      height: 88px;
+      border-radius: var(--radius-sm);
+    }
+
+    .triage-mid {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .triage-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .triage-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      min-width: 160px;
+    }
+
+    .shell-c-dock {
+      position: sticky;
+      top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: calc(100vh - 105px);
+      overflow-y: auto;
+    }
+
+    .dock-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Accessible Tablist inside Variant C dock (modern-web-guidance: tabs) */
+    .dock-tablist {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+
+    .dock-tab {
+      position: relative;
+      flex: none;
+      padding: 8px 12px;
+      border: 0;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .dock-tab[aria-selected="true"] {
+      color: var(--accent);
+    }
+
+    .dock-tab[aria-selected="true"]::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      border-block-end: 3px solid var(--accent);
+    }
+
+    .dock-tabpanel-inner {
+      padding-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Shared Watchlist & Settings surfaces */
+    .panel-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .watchlist-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 12px;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 14px;
+    }
+
+    .toolbar-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Scroll-safe floating merge pill */
+    .merge-pill {
+      position: fixed;
+      bottom: 76px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 850;
+      background: #1d4ed8;
+      color: #ffffff;
+      border: 2px solid #93c5fd;
+      border-radius: 999px;
+      padding: 9px 18px;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 10px 28px rgba(29, 78, 216, 0.38);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .merge-pill:hover {
+      background: #1e40af;
+    }
+
+    .merge-pill[hidden] {
+      display: none;
+    }
+
+    /* Floating bottom prototype switcher */
+    .proto-bar {
+      position: fixed;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 950;
+      background: #18181b;
+      color: #f4f4f5;
+      border: 1px solid #3f3f46;
+      border-radius: 999px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      max-width: 96vw;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .proto-tag {
+      background: #f59e0b;
+      color: #18181b;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 999px;
+      letter-spacing: 0.05em;
+    }
+
+    .proto-arrow {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 1px solid #3f3f46;
+      background: #27272a;
+      color: #f4f4f5;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    .proto-arrow:hover {
+      background: #3f3f46;
+    }
+
+    .proto-label {
+      font-size: 12.5px;
+      font-weight: 700;
+      padding: 0 4px;
+      color: #ffffff;
+    }
+
+    .proto-sep {
+      width: 1px;
+      height: 20px;
+      background: #3f3f46;
+      flex-shrink: 0;
+    }
+
+    .proto-select {
+      background: #27272a;
+      color: #f4f4f5;
+      border: 1px solid #3f3f46;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    .proto-btn {
+      background: #2563eb;
+      color: #ffffff;
+      border: 0;
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .proto-btn:hover {
+      background: #1d4ed8;
+    }
+
+    .proto-scroll-state {
+      font-size: 11px;
+      color: #a1a1aa;
+      padding: 0 4px;
+    }
+
+    /* Native Modal <dialog> styling (modern-web-guidance: dialog) */
+    dialog {
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 0;
+      max-width: min(440px, 92vw);
+      width: 100%;
+      box-shadow: var(--shadow-lg);
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    dialog[open] {
+      display: block;
+    }
+
+    dialog:modal {
+      overscroll-behavior: contain;
+    }
+
+    dialog::backdrop {
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(2px);
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    .dialog-inner {
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .dialog-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    /* Persistent Toast Notifications (modern-web-guidance: persistent-toast-notifications) */
+    .toast-stack {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 960;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast-item {
+      pointer-events: auto;
+      position: fixed;
+      inset: 16px 16px auto auto;
+      margin: 0;
+      border: 1px solid #334155;
+      border-radius: var(--radius-md);
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 10px 14px;
+      box-shadow: var(--shadow-lg);
+      max-width: min(380px, 92vw);
+      opacity: 0;
+      transform: translateY(-8px);
+      transition: opacity 0.2s ease, transform 0.2s ease, display 0.2s ease, overlay 0.2s ease;
+      transition-behavior: allow-discrete;
+    }
+
+    .toast-item:is(:popover-open, .\:popover-open, .toast-visible) {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @starting-style {
+      .toast-item:is(:popover-open, .\:popover-open, .toast-visible) {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .toast-item {
+        transition: none;
+      }
+      .fb-spinner-icon {
+        animation: none;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .shell-a {
+        grid-template-columns: 1fr;
+      }
+      .shell-a-sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .shell-c-body {
+        grid-template-columns: 1fr;
+      }
+      .shell-c-dock {
+        position: static;
+        max-height: none;
+      }
+      .triage-row {
+        grid-template-columns: 72px minmax(0, 1fr);
+      }
+      .triage-right {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app-root"></div>
+
+  <!-- Scroll-safe floating merge pill -->
+  <button id="scroll-merge-pill" type="button" class="merge-pill" hidden>
+    <span id="scroll-merge-text">+0 new Listings — Click to merge</span>
+  </button>
+
+  <!-- Toast notifications region + pre-populated ARIA fallback live region -->
+  <p class="visually-hidden">Screen reader notifications</p>
+  <div id="sr-live-region" class="visually-hidden" aria-live="polite"></div>
+  <div role="region" aria-label="Notifications" class="toast-stack">
+    <div id="undo-toast" popover="manual" class="toast-item" tabindex="-1">
+      <span id="undo-toast-msg" style="font-size: 13px; flex: 1;"></span>
+      <button id="undo-toast-action" type="button" class="btn btn-sm btn-primary" hidden>Undo</button>
+      <button id="undo-toast-close" type="button" class="btn btn-sm btn-ghost" style="color:#cbd5e1;" popovertarget="undo-toast" popovertargetaction="hide" aria-label="Close notification">Close</button>
+    </div>
+  </div>
+
+  <!-- Native modal dialogs -->
+  <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title">
+    <form method="dialog" class="dialog-inner">
+      <h2 id="confirm-dialog-title" class="dialog-title">Confirm action</h2>
+      <p id="confirm-dialog-body" style="margin:0; color: var(--text-muted); font-size: 13.5px;"></p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn" autofocus>Cancel</button>
+        <button type="submit" value="confirm" id="confirm-dialog-submit" class="btn btn-danger">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="rename-dialog" closedby="any" aria-labelledby="rename-dialog-title">
+    <form method="dialog" class="dialog-inner">
+      <h2 id="rename-dialog-title" class="dialog-title">Rename Saved Search</h2>
+      <label for="rename-dialog-input" style="font-size: 12.5px; font-weight: 600;">Saved Search name</label>
+      <input id="rename-dialog-input" type="text" class="input" required maxlength="80">
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn">Cancel</button>
+        <button type="submit" value="confirm" class="btn btn-primary">Save name</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="save-new-dialog" closedby="any" aria-labelledby="save-new-dialog-title">
+    <form method="dialog" class="dialog-inner">
+      <h2 id="save-new-dialog-title" class="dialog-title">Save Search</h2>
+      <label for="save-new-dialog-input" style="font-size: 12.5px; font-weight: 600;">Name (auto-suggested from keywords and Unified Filters)</label>
+      <input id="save-new-dialog-input" type="text" class="input" required maxlength="80">
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn">Cancel</button>
+        <button type="submit" value="confirm" class="btn btn-primary">Save Search</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Floating bottom prototype switcher bar -->
+  <aside class="proto-bar" aria-label="Prototype variant switcher">
+    <span class="proto-tag">PROTOTYPE</span>
+    <button id="proto-prev" type="button" class="proto-arrow" aria-label="Previous variant">←</button>
+    <span id="proto-label" class="proto-label">A (Workbench Sidebar)</span>
+    <button id="proto-next" type="button" class="proto-arrow" aria-label="Next variant">→</button>
+    <span class="proto-sep" aria-hidden="true"></span>
+    <label for="proto-scenario" class="visually-hidden">Prototype scenario</label>
+    <select id="proto-scenario" class="proto-select" title="Switch prototype scenario">
+      <option value="normal">Scenario: Normal 8-City Sweep</option>
+      <option value="local_pickup">Scenario: Local Pickup (Skipped)</option>
+      <option value="broadened">Scenario: Broadened Condition</option>
+      <option value="partial_failure">Scenario: Checkpoint / Partial Failure</option>
+    </select>
+    <button id="proto-stream-btn" type="button" class="proto-btn">+ Stream Batch</button>
+    <span id="proto-scroll-state" class="proto-scroll-state">Top: live merge</span>
+  </aside>
+
+  <script>
+    (() => {
+      'use strict';
+
+      // --- Constants & Canonical Labels (GLOSSARY.md) ---
+      const MARKETPLACES = [
+        { id: 'ebay', label: 'eBay', short: 'eBay', badgeClass: 'mp-ebay' },
+        { id: 'poshmark', label: 'Poshmark', short: 'Poshmark', badgeClass: 'mp-poshmark' },
+        { id: 'mercari', label: 'Mercari US', short: 'Mercari US', badgeClass: 'mp-mercari' },
+        { id: 'facebook', label: 'Facebook Marketplace', short: 'Facebook', badgeClass: 'mp-facebook' }
+      ];
+
+      const CONDITION_TIERS = [
+        { id: 'new', label: 'New' },
+        { id: 'like_new', label: 'Like New' },
+        { id: 'good', label: 'Good' },
+        { id: 'fair', label: 'Fair' },
+        { id: 'poor', label: 'Poor' }
+      ];
+
+      const SORT_OPTIONS = [
+        { id: 'relevance', label: 'Relevance (interleaved)' },
+        { id: 'newest', label: 'Newest (interleaved)' },
+        { id: 'price_asc', label: 'Price: Low → High' },
+        { id: 'price_desc', label: 'Price: High → Low' }
+      ];
+
+      const DEFAULT_HUBS = [
+        { slug: 'seattle', label: 'Seattle, WA' },
+        { slug: 'sanfrancisco', label: 'San Francisco, CA' },
+        { slug: 'losangeles', label: 'Los Angeles, CA' },
+        { slug: 'denver', label: 'Denver, CO' },
+        { slug: 'dallas', label: 'Dallas, TX' },
+        { slug: 'chicago', label: 'Chicago, IL' },
+        { slug: 'atlanta', label: 'Atlanta, GA' },
+        { slug: 'newyork', label: 'New York, NY' }
+      ];
+
+      const VARIANT_META = {
+        A: { id: 'A', name: 'Workbench Sidebar' },
+        B: { id: 'B', name: 'Full-Width Command Bar' },
+        C: { id: 'C', name: 'Split Triage + Watchlist Dock' }
+      };
+
+      // --- Offline Inline SVG Thumbnail Generator ---
+      function makeSvgThumb(motif, bg, fg, accent, tag) {
+        let shape = '';
+        if (motif === 'headphones') {
+          shape = `
+            <path d="M52 84 C52 46, 108 46, 108 84" fill="none" stroke="${fg}" stroke-width="10" stroke-linecap="round"/>
+            <rect x="44" y="76" width="18" height="32" rx="8" fill="${accent}"/>
+            <rect x="98" y="76" width="18" height="32" rx="8" fill="${accent}"/>`;
+        } else if (motif === 'chair') {
+          shape = `
+            <rect x="52" y="34" width="56" height="44" rx="10" fill="${fg}"/>
+            <rect x="48" y="82" width="64" height="12" rx="4" fill="${accent}"/>
+            <line x1="80" y1="94" x2="80" y2="112" stroke="${fg}" stroke-width="6"/>
+            <line x1="56" y1="112" x2="104" y2="112" stroke="${fg}" stroke-width="6" stroke-linecap="round"/>`;
+        } else {
+          // Jacket silhouette with puffer baffles
+          shape = `
+            <path d="M56 34 L70 28 L90 28 L104 34 L126 52 L116 74 L104 66 L104 114 L56 114 L56 66 L44 74 L34 52 Z" fill="${fg}"/>
+            <line x1="80" y1="28" x2="80" y2="114" stroke="${accent}" stroke-width="3"/>
+            <line x1="56" y1="54" x2="104" y2="54" stroke="${bg}" stroke-opacity="0.35" stroke-width="2.5"/>
+            <line x1="56" y1="74" x2="104" y2="74" stroke="${bg}" stroke-opacity="0.35" stroke-width="2.5"/>
+            <line x1="56" y1="94" x2="104" y2="94" stroke="${bg}" stroke-opacity="0.35" stroke-width="2.5"/>`;
+        }
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 160 130">
+          <rect width="160" height="130" fill="${bg}"/>
+          ${shape}
+          <text x="10" y="122" font-family="sans-serif" font-size="9" font-weight="700" fill="${fg}" opacity="0.65">${tag}</text>
+        </svg>`;
+        return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+      }
+
+      // --- Seeded Listings (24 initial + 8 streamable/paginatable extra for default Patagonia query) ---
+      const PATAGONIA_INITIAL = [
+        // eBay (6)
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1001', title: 'Patagonia Nano Puff Jacket Mens Large Forge Grey Insulated', price: 118, shippingPrice: 0, shippingType: 'free', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Like New', locationLabel: 'Portland, OR', nativeRank: 1, hoursAgo: 3, thumb: makeSvgThumb('jacket', '#e2e8f0', '#334155', '#94a3b8', 'FORGE GREY'), url: 'https://www.ebay.com/itm/1001' },
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1002', title: 'Patagonia Nano Puff Full-Zip Jacket Cobalt Blue Size M', price: 76, shippingPrice: 8.95, shippingType: 'known', listingFormat: 'AUCTION', bidCount: 7, buyNowPrice: 112, conditionTier: 'good', conditionLabel: 'Good (Used)', locationLabel: 'Seattle, WA', nativeRank: 2, hoursAgo: 6, thumb: makeSvgThumb('jacket', '#dbeafe', '#1d4ed8', '#93c5fd', 'AUCTION'), url: 'https://www.ebay.com/itm/1002' },
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1003', title: 'Patagonia Mens Nano Puff Hoody New With Tags Pine Green L', price: 169, shippingPrice: 0, shippingType: 'free', listingFormat: 'FIXED_PRICE', conditionTier: 'new', conditionLabel: 'New with tags', locationLabel: 'Boulder, CO', nativeRank: 3, hoursAgo: 1, thumb: makeSvgThumb('jacket', '#dcfce7', '#166534', '#86efac', 'NWT HOODY'), url: 'https://www.ebay.com/itm/1003' },
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1004', title: 'Patagonia Nano Puff Jacket Black Medium Light Wear', price: 62, shippingPrice: 9.5, shippingType: 'known', listingFormat: 'AUCTION', bidCount: 4, buyNowPrice: null, conditionTier: 'fair', conditionLabel: 'Fair (Used)', locationLabel: 'Chicago, IL', nativeRank: 4, hoursAgo: 12, thumb: makeSvgThumb('jacket', '#e5e7eb', '#111827', '#6b7280', 'BLACK M'), url: 'https://www.ebay.com/itm/1004' },
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1005', title: 'Patagonia Womens Nano Puff Jacket Birch White Small', price: 94, shippingPrice: 7.45, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Good (Used)', locationLabel: 'Austin, TX', nativeRank: 5, hoursAgo: 9, thumb: makeSvgThumb('jacket', '#f8fafc', '#64748b', '#cbd5e1', 'BIRCH W-S'), url: 'https://www.ebay.com/itm/1005' },
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1006', title: 'Patagonia Nano Puff Pullover Half-Zip Terracotta Large', price: 84, shippingPrice: 0, shippingType: 'local_pickup', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Good (Used)', locationLabel: 'New York, NY', nativeRank: 6, hoursAgo: 18, thumb: makeSvgThumb('jacket', '#ffedd5', '#9a3412', '#fdba74', 'LOCAL NYC'), url: 'https://www.ebay.com/itm/1006' },
+
+        // Poshmark (6)
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2001', title: 'Patagonia Nano Puff Insulated Jacket Navy Size L', price: 110, shippingPrice: 7.97, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Pre-owned (Poshmark)', locationLabel: 'Denver, CO', nativeRank: 1, hoursAgo: 2, thumb: makeSvgThumb('jacket', '#e0e7ff', '#1e3a8a', '#818cf8', 'NAVY L'), url: 'https://poshmark.com/listing/2001' },
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2002', title: 'NWT Patagonia Nano Puff Jacket Classic Navy Medium', price: 165, shippingPrice: 7.97, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'new', conditionLabel: 'NWT', locationLabel: 'Boston, MA', nativeRank: 2, hoursAgo: 5, thumb: makeSvgThumb('jacket', '#ede9fe', '#4c1d95', '#a78bfa', 'NWT M'), url: 'https://poshmark.com/listing/2002' },
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2003', title: 'Patagonia Nano Puff Jacket Feather Grey Womens M', price: 89, shippingPrice: 7.97, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Pre-owned (Poshmark)', locationLabel: 'San Diego, CA', nativeRank: 3, hoursAgo: 7, thumb: makeSvgThumb('jacket', '#f1f5f9', '#475569', '#94a3b8', 'GREY W-M'), url: 'https://poshmark.com/listing/2003' },
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2004', title: 'Patagonia Nano Puff Jacket Olive Green Small Pinholes Repaired', price: 54, shippingPrice: 7.97, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'fair', conditionLabel: 'Pre-owned (Poshmark)', locationLabel: 'Atlanta, GA', nativeRank: 4, hoursAgo: 22, thumb: makeSvgThumb('jacket', '#ecfccb', '#3f6212', '#a3e635', 'OLIVE S'), url: 'https://poshmark.com/listing/2004' },
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2005', title: 'Patagonia Nano Puff Jacket Red Barn Mens XL Clean', price: 105, shippingPrice: 0, shippingType: 'free', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Pre-owned (Poshmark)', locationLabel: 'Minneapolis, MN', nativeRank: 5, hoursAgo: 11, thumb: makeSvgThumb('jacket', '#fee2e2', '#991b1b', '#fca5a5', 'BARN XL'), url: 'https://poshmark.com/listing/2005' },
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2006', title: 'Patagonia Nano Puff Jacket Golden Ochre Size S', price: 79, shippingPrice: 7.97, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Pre-owned (Poshmark)', locationLabel: 'Salt Lake City, UT', nativeRank: 6, hoursAgo: 15, thumb: makeSvgThumb('jacket', '#fef3c7', '#92400e', '#fcd34d', 'OCHRE S'), url: 'https://poshmark.com/listing/2006' },
+
+        // Mercari US (6)
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3001', title: 'Patagonia Nano Puff Jacket Black Mens L Excellent Condition', price: 112, shippingPrice: null, shippingType: 'buyer_paid_unknown', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Like New', locationLabel: 'San Jose, CA', nativeRank: 1, hoursAgo: 4, thumb: makeSvgThumb('jacket', '#e4e4e7', '#18181b', '#71717a', 'BLACK L'), url: 'https://www.mercari.com/us/item/3001/' },
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3002', title: 'Patagonia Nano Puff Hooded Jacket Teal Medium', price: 96, shippingPrice: 6.99, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Good', locationLabel: 'Phoenix, AZ', nativeRank: 2, hoursAgo: 8, thumb: makeSvgThumb('jacket', '#ccfbf1', '#115e59', '#5eead4', 'TEAL M'), url: 'https://www.mercari.com/us/item/3002/' },
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3003', title: 'Patagonia Nano Puff Bivy Pullover Dark Ruby XL', price: 125, shippingPrice: 0, shippingType: 'free', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Like New', locationLabel: 'Dallas, TX', nativeRank: 3, hoursAgo: 10, thumb: makeSvgThumb('jacket', '#ffe4e6', '#881337', '#fda4af', 'RUBY XL'), url: 'https://www.mercari.com/us/item/3003/' },
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3004', title: 'Patagonia Nano Puff Jacket Aged Well Worn Cuff Repairs M', price: 42, shippingPrice: null, shippingType: 'buyer_paid_unknown', listingFormat: 'FIXED_PRICE', conditionTier: 'poor', conditionLabel: 'Poor', locationLabel: 'Columbus, OH', nativeRank: 4, hoursAgo: 30, thumb: makeSvgThumb('jacket', '#f3f4f6', '#4b5563', '#9ca3af', 'REPAIR M'), url: 'https://www.mercari.com/us/item/3004/' },
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3005', title: 'Patagonia Nano Puff Jacket New Without Tags Slate Blue S', price: 145, shippingPrice: 7.99, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'new', conditionLabel: 'New', locationLabel: 'Charlotte, NC', nativeRank: 5, hoursAgo: 2, thumb: makeSvgThumb('jacket', '#e0f2fe', '#0369a1', '#7dd3fc', 'SLATE S'), url: 'https://www.mercari.com/us/item/3005/' },
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3006', title: 'Patagonia Nano Puff Jacket Burnt Orange Mens M', price: 82, shippingPrice: null, shippingType: 'buyer_paid_unknown', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Good', locationLabel: 'Nashville, TN', nativeRank: 6, hoursAgo: 16, thumb: makeSvgThumb('jacket', '#ffedd5', '#c2410c', '#fb923c', 'ORANGE M'), url: 'https://www.mercari.com/us/item/3006/' },
+
+        // Facebook Marketplace (6 across City Hubs; 2 with expired/broken thumbnails)
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4001', cityHub: 'seattle', title: 'Patagonia Nano Puff Jacket Mens M — Barely Worn', price: 85, shippingPrice: 0, shippingType: 'local_pickup', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Used - Like New', locationLabel: 'Seattle, WA', nativeRank: 1, hoursAgo: 1, thumb: makeSvgThumb('jacket', '#d1fae5', '#065f46', '#6ee7b7', 'SEA HUB'), url: 'https://www.facebook.com/marketplace/item/4001' },
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4002', cityHub: 'sanfrancisco', title: 'Patagonia Nano Puff Jacket Charcoal Large (Can Ship)', price: 90, shippingPrice: null, shippingType: 'buyer_paid_unknown', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Used - Good', locationLabel: 'Oakland, CA', nativeRank: 1, hoursAgo: 4, brokenThumb: true, thumb: '', url: 'https://www.facebook.com/marketplace/item/4002' },
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4003', cityHub: 'losangeles', title: 'Patagonia Nano Puff Full Zip Navy Womens Medium', price: 75, shippingPrice: 0, shippingType: 'local_pickup', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Used - Good', locationLabel: 'Pasadena, CA', nativeRank: 1, hoursAgo: 7, thumb: makeSvgThumb('jacket', '#e0f2fe', '#075985', '#38bdf8', 'LA HUB'), url: 'https://www.facebook.com/marketplace/item/4003' },
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4004', cityHub: 'denver', title: 'Patagonia Nano Puff Hoody Mens XL New With Tags', price: 150, shippingPrice: null, shippingType: 'buyer_paid_unknown', listingFormat: 'FIXED_PRICE', conditionTier: 'new', conditionLabel: 'New', locationLabel: 'Lakewood, CO', nativeRank: 2, hoursAgo: 3, thumb: makeSvgThumb('jacket', '#dcfce7', '#15803d', '#4ade80', 'DEN HUB'), url: 'https://www.facebook.com/marketplace/item/4004' },
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4005', cityHub: 'chicago', title: 'Patagonia Nano Puff Jacket Black Size S Local Pickup', price: 68, shippingPrice: 0, shippingType: 'local_pickup', listingFormat: 'FIXED_PRICE', conditionTier: 'fair', conditionLabel: 'Used - Fair', locationLabel: 'Evanston, IL', nativeRank: 2, hoursAgo: 14, brokenThumb: true, thumb: '', url: 'https://www.facebook.com/marketplace/item/4005' },
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4006', cityHub: 'newyork', title: 'Patagonia Nano Puff Jacket Navy Large — Midtown Pickup', price: 95, shippingPrice: 0, shippingType: 'local_pickup', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Used - Like New', locationLabel: 'New York, NY', nativeRank: 2, hoursAgo: 2, thumb: makeSvgThumb('jacket', '#dbeafe', '#1e40af', '#60a5fa', 'NYC HUB'), url: 'https://www.facebook.com/marketplace/item/4006' }
+      ];
+
+      // 8 streamable / paginatable extra Listings
+      const PATAGONIA_EXTRA = [
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4007', cityHub: 'dallas', title: 'Patagonia Nano Puff Jacket Slate Grey Mens L', price: 88, shippingPrice: null, shippingType: 'buyer_paid_unknown', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Used - Good', locationLabel: 'Plano, TX', nativeRank: 3, hoursAgo: 0.5, thumb: makeSvgThumb('jacket', '#e2e8f0', '#475569', '#94a3b8', 'DAL HUB'), url: 'https://www.facebook.com/marketplace/item/4007' },
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1007', title: 'Patagonia Nano Puff Jacket Tidepool Blue Mens M Auction', price: 64, shippingPrice: 7.5, shippingType: 'known', listingFormat: 'AUCTION', bidCount: 11, buyNowPrice: 115, conditionTier: 'good', conditionLabel: 'Good (Used)', locationLabel: 'Madison, WI', nativeRank: 7, hoursAgo: 0.3, thumb: makeSvgThumb('jacket', '#cffafe', '#0e7490', '#22d3ee', 'AUCTION 11'), url: 'https://www.ebay.com/itm/1007' },
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2007', title: 'Patagonia Nano Puff Jacket Black Womens M Great Shape', price: 92, shippingPrice: 7.97, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Pre-owned (Poshmark)', locationLabel: 'Raleigh, NC', nativeRank: 7, hoursAgo: 0.8, thumb: makeSvgThumb('jacket', '#f4f4f5', '#27272a', '#71717a', 'BLACK W-M'), url: 'https://poshmark.com/listing/2007' },
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3007', title: 'Patagonia Nano Puff Jacket Sage Green Large', price: 98, shippingPrice: 0, shippingType: 'free', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Like New', locationLabel: 'Tampa, FL', nativeRank: 7, hoursAgo: 0.4, thumb: makeSvgThumb('jacket', '#dcfce7', '#3f6212', '#84cc16', 'SAGE L'), url: 'https://www.mercari.com/us/item/3007/' },
+        { marketplace: 'facebook', marketplaceListingId: 'fb-4008', cityHub: 'atlanta', title: 'Patagonia Nano Puff Pullover Blue M — Decatur Pickup', price: 72, shippingPrice: 0, shippingType: 'local_pickup', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Used - Good', locationLabel: 'Decatur, GA', nativeRank: 3, hoursAgo: 1, thumb: makeSvgThumb('jacket', '#dbeafe', '#1d4ed8', '#60a5fa', 'ATL HUB'), url: 'https://www.facebook.com/marketplace/item/4008' },
+        { marketplace: 'ebay', marketplaceListingId: 'eb-1008', title: 'Patagonia Nano Puff Jacket Obsidian Plum Womens L', price: 109, shippingPrice: 0, shippingType: 'free', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Like New', locationLabel: 'Eugene, OR', nativeRank: 8, hoursAgo: 1.2, thumb: makeSvgThumb('jacket', '#fae8ff', '#701a75', '#e879f9', 'PLUM W-L'), url: 'https://www.ebay.com/itm/1008' },
+        { marketplace: 'poshmark', marketplaceListingId: 'pm-2008', title: 'Patagonia Nano Puff Jacket Crisp Cobalt XL', price: 115, shippingPrice: 7.97, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'like_new', conditionLabel: 'Pre-owned (Poshmark)', locationLabel: 'Pittsburgh, PA', nativeRank: 8, hoursAgo: 1.5, thumb: makeSvgThumb('jacket', '#eff6ff', '#1e40af', '#93c5fd', 'COBALT XL'), url: 'https://poshmark.com/listing/2008' },
+        { marketplace: 'mercari', marketplaceListingId: 'mc-3008', title: 'Patagonia Nano Puff Jacket Deep Navy Small', price: 86, shippingPrice: 6.99, shippingType: 'known', listingFormat: 'FIXED_PRICE', conditionTier: 'good', conditionLabel: 'Good', locationLabel: 'Sacramento, CA', nativeRank: 8, hoursAgo: 1.8, thumb: makeSvgThumb('jacket', '#e0e7ff', '#312e81', '#818cf8', 'NAVY S'), url: 'https://www.mercari.com/us/item/3008/' }
+      ];
+
+      function buildQueryPool(keywords) {
+        const kw = keywords.trim().toLowerCase();
+        if (!kw || kw.includes('patagonia') || kw.includes('nano puff')) {
+          return {
+            initial: PATAGONIA_INITIAL.map(l => ({ ...l })),
+            extra: PATAGONIA_EXTRA.map(l => ({ ...l }))
+          };
+        }
+        const isHeadphones = kw.includes('sony') || kw.includes('xm5') || kw.includes('headphone');
+        const isChair = kw.includes('aeron') || kw.includes('herman') || kw.includes('chair');
+        const motif = isHeadphones ? 'headphones' : isChair ? 'chair' : 'jacket';
+        const titlePrefix = keywords.trim();
+        const pool = [];
+        const cities = ['seattle', 'sanfrancisco', 'losangeles', 'denver', 'dallas', 'chicago', 'atlanta', 'newyork'];
+        const cityLabels = { seattle: 'Seattle, WA', sanfrancisco: 'San Francisco, CA', losangeles: 'Los Angeles, CA', denver: 'Denver, CO', dallas: 'Dallas, TX', chicago: 'Chicago, IL', atlanta: 'Atlanta, GA', newyork: 'New York, NY' };
+        const basePrices = isChair ? [380, 445, 510, 425] : isHeadphones ? [185, 210, 240, 195] : [65, 85, 110, 95];
+        const tiers = ['like_new', 'good', 'new', 'fair'];
+        const tierLabels = { new: 'New', like_new: 'Like New', good: 'Good', fair: 'Fair' };
+        for (let i = 0; i < 16; i++) {
+          const mp = MARKETPLACES[i % 4].id;
+          const rank = Math.floor(i / 4) + 1;
+          const tier = tiers[i % tiers.length];
+          const price = basePrices[i % basePrices.length] + (i * 7);
+          const hub = cities[i % cities.length];
+          const isAuction = mp === 'ebay' && i % 8 === 0;
+          pool.push({
+            marketplace: mp,
+            marketplaceListingId: `${mp}-${slugify(titlePrefix)}-${i + 1}`,
+            cityHub: mp === 'facebook' ? hub : undefined,
+            title: `${titlePrefix} — ${tierLabels[tier]} ${mp === 'ebay' && isAuction ? '(Auction)' : '#' + (i + 1)}`,
+            price,
+            shippingPrice: mp === 'facebook' ? 0 : mp === 'poshmark' ? 7.97 : mp === 'mercari' ? null : (i % 2 === 0 ? 0 : 12),
+            shippingType: mp === 'facebook' ? 'local_pickup' : mp === 'mercari' ? 'buyer_paid_unknown' : (i % 2 === 0 ? 'free' : 'known'),
+            listingFormat: isAuction ? 'AUCTION' : 'FIXED_PRICE',
+            bidCount: isAuction ? 5 : undefined,
+            buyNowPrice: isAuction ? price + 45 : undefined,
+            conditionTier: tier,
+            conditionLabel: tierLabels[tier],
+            locationLabel: mp === 'facebook' ? cityLabels[hub] : ['Austin, TX', 'Portland, OR', 'Boston, MA', 'Denver, CO'][i % 4],
+            nativeRank: rank,
+            hoursAgo: i + 1,
+            thumb: makeSvgThumb(motif, '#e2e8f0', '#1e293b', '#60a5fa', mp.toUpperCase()),
+            url: `https://example.com/${mp}/${i + 1}`
+          });
+        }
+        return { initial: pool.slice(0, 12), extra: pool.slice(12) };
+      }
+
+      function slugify(str) {
+        return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 18) || 'query';
+      }
+
+      // --- Shared Reactive App State ---
+      const state = {
+        variant: 'A',
+        view: 'search', // 'search' | 'watchlist' | 'settings'
+        scenario: 'normal', // 'normal' | 'local_pickup' | 'broadened' | 'partial_failure'
+        dockTab: 'watchlist', // Variant C right dock tab: 'watchlist' | 'saved'
+        cFilterDrawerOpen: false,
+        bDiagnosticsOpen: false,
+
+        // Search & Unified Filters
+        keywords: 'Patagonia Nano Puff jacket',
+        keywordError: '',
+        priceMin: '',
+        priceMax: '',
+        conditions: [], // ['new', 'like_new', 'good', 'fair', 'poor']
+        fulfillment: 'any', // 'any' | 'shipping' | 'local_pickup'
+        pickupZip: '10001',
+        pickupRadiusMiles: 50,
+        selectedHubs: DEFAULT_HUBS.map(h => h.slug),
+        sortOrder: 'relevance',
+        includeKnownShipping: false,
+
+        // Pre-run vs Post-run Marketplace controls
+        armedMarketplaces: { ebay: true, poshmark: true, mercari: true, facebook: true },
+        queriedMarketplaces: { ebay: true, poshmark: true, mercari: true, facebook: true },
+        visibleMarketplaces: { ebay: true, poshmark: true, mercari: true, facebook: true },
+
+        // Results & Streaming
+        loadedListings: [],
+        extraPool: [],
+        pendingBuffer: [],
+        bufferLatched: false,
+        fbSweep: { active: false, currentCityIdx: 8, totalCities: 8, stoppedByUser: false, cooldownLabel: '' },
+        marketplaceStates: {
+          ebay: { status: 'ready', sessionReady: true, reason: '', count: 0 },
+          poshmark: { status: 'ready', sessionReady: true, reason: '', count: 0 },
+          mercari: { status: 'ready', sessionReady: true, reason: '', count: 0 },
+          facebook: { status: 'ready', sessionReady: true, reason: '', count: 0 }
+        },
+
+        // Saved Searches (8 seeded so ~6 visible before scrolling; order stays stable on click)
+        activeSavedSearchId: 'ss-1',
+        savedSearchDirty: false,
+        savedSearches: [
+          {
+            id: 'ss-1',
+            name: 'Patagonia Nano Puff jacket',
+            keywords: 'Patagonia Nano Puff jacket',
+            unifiedFilters: { priceMin: '', priceMax: '', conditions: [], fulfillment: 'any', pickupZip: '10001', pickupRadiusMiles: 50, selectedHubs: DEFAULT_HUBS.map(h => h.slug) },
+            marketplaces: ['ebay', 'poshmark', 'mercari', 'facebook'],
+            sortOrder: 'relevance',
+            createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 14 * 60000).toISOString()
+          },
+          {
+            id: 'ss-2',
+            name: 'Sony WH-1000XM5 headphones (Under $240)',
+            keywords: 'Sony WH-1000XM5 headphones',
+            unifiedFilters: { priceMin: '', priceMax: '240', conditions: ['new', 'like_new', 'good'], fulfillment: 'shipping', pickupZip: '10001', pickupRadiusMiles: 25, selectedHubs: DEFAULT_HUBS.map(h => h.slug) },
+            marketplaces: ['ebay', 'poshmark', 'mercari', 'facebook'],
+            sortOrder: 'price_asc',
+            createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 2 * 3600000).toISOString()
+          },
+          {
+            id: 'ss-3',
+            name: 'Herman Miller Aeron chair (Local NYC)',
+            keywords: 'Herman Miller Aeron chair',
+            unifiedFilters: { priceMin: '250', priceMax: '600', conditions: ['like_new', 'good'], fulfillment: 'local_pickup', pickupZip: '10001', pickupRadiusMiles: 50, selectedHubs: ['newyork'] },
+            marketplaces: ['ebay', 'poshmark', 'mercari', 'facebook'],
+            sortOrder: 'newest',
+            createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 26 * 3600000).toISOString()
+          },
+          {
+            id: 'ss-4',
+            name: "Arc'teryx Atom LT hoody",
+            keywords: "Arc'teryx Atom LT hoody",
+            unifiedFilters: { priceMin: '90', priceMax: '190', conditions: ['new', 'like_new'], fulfillment: 'any', pickupZip: '10001', pickupRadiusMiles: 50, selectedHubs: DEFAULT_HUBS.map(h => h.slug) },
+            marketplaces: ['ebay', 'poshmark', 'mercari', 'facebook'],
+            sortOrder: 'relevance',
+            createdAt: new Date(Date.now() - 8 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 2 * 86400000).toISOString()
+          },
+          {
+            id: 'ss-5',
+            name: 'Garmin Forerunner 265 GPS watch',
+            keywords: 'Garmin Forerunner 265 GPS watch',
+            unifiedFilters: { priceMin: '', priceMax: '320', conditions: ['like_new', 'good'], fulfillment: 'shipping', pickupZip: '10001', pickupRadiusMiles: 25, selectedHubs: DEFAULT_HUBS.map(h => h.slug) },
+            marketplaces: ['ebay', 'mercari', 'facebook'],
+            sortOrder: 'price_asc',
+            createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 4 * 86400000).toISOString()
+          },
+          {
+            id: 'ss-6',
+            name: 'Breville Bambino Plus espresso',
+            keywords: 'Breville Bambino Plus espresso',
+            unifiedFilters: { priceMin: '150', priceMax: '380', conditions: ['like_new', 'good'], fulfillment: 'any', pickupZip: '10001', pickupRadiusMiles: 50, selectedHubs: DEFAULT_HUBS.map(h => h.slug) },
+            marketplaces: ['ebay', 'mercari', 'facebook'],
+            sortOrder: 'newest',
+            createdAt: new Date(Date.now() - 11 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 6 * 86400000).toISOString()
+          },
+          {
+            id: 'ss-7',
+            name: 'Le Creuset Dutch Oven 5.5qt',
+            keywords: 'Le Creuset Dutch Oven 5.5qt',
+            unifiedFilters: { priceMin: '100', priceMax: '240', conditions: ['new', 'like_new', 'good'], fulfillment: 'any', pickupZip: '10001', pickupRadiusMiles: 50, selectedHubs: DEFAULT_HUBS.map(h => h.slug) },
+            marketplaces: ['ebay', 'poshmark', 'mercari', 'facebook'],
+            sortOrder: 'price_asc',
+            createdAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 9 * 86400000).toISOString()
+          },
+          {
+            id: 'ss-8',
+            name: 'Nintendo Switch OLED console',
+            keywords: 'Nintendo Switch OLED console',
+            unifiedFilters: { priceMin: '160', priceMax: '270', conditions: ['new', 'like_new', 'good'], fulfillment: 'any', pickupZip: '10001', pickupRadiusMiles: 25, selectedHubs: DEFAULT_HUBS.map(h => h.slug) },
+            marketplaces: ['ebay', 'mercari', 'facebook'],
+            sortOrder: 'relevance',
+            createdAt: new Date(Date.now() - 16 * 86400000).toISOString(),
+            lastRunAt: new Date(Date.now() - 12 * 86400000).toISOString()
+          }
+        ],
+
+        // Watchlist (PII-free Watchlist Entries; includes 1 broken thumb & 1 null price)
+        watchlistSort: 'saved_desc', // 'saved_desc' | 'price_asc' | 'price_desc'
+        watchlistFilterMp: 'all',
+        watchlistEntries: [
+          {
+            marketplace: 'ebay',
+            marketplaceListingId: 'eb-1001',
+            url: 'https://www.ebay.com/itm/1001',
+            title: 'Patagonia Nano Puff Jacket Mens Large Forge Grey Insulated',
+            price: 118,
+            shippingPrice: 0,
+            thumbnailUrl: makeSvgThumb('jacket', '#e2e8f0', '#334155', '#94a3b8', 'CACHED'),
+            cachedThumbnailPath: 'thumbnails/eb-1001.webp',
+            savedAt: '2026-11-19T20:10:00Z'
+          },
+          {
+            marketplace: 'facebook',
+            marketplaceListingId: 'fb-4002',
+            url: 'https://www.facebook.com/marketplace/item/4002',
+            title: 'Patagonia Nano Puff Jacket Charcoal Large (Can Ship)',
+            price: 90,
+            shippingPrice: null,
+            thumbnailUrl: '',
+            brokenThumb: true,
+            cachedThumbnailPath: null,
+            savedAt: '2026-11-19T18:30:00Z'
+          },
+          {
+            marketplace: 'mercari',
+            marketplaceListingId: 'mc-9001',
+            url: 'https://www.mercari.com/us/item/9001/',
+            title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones Silver',
+            price: 199,
+            shippingPrice: 11.99,
+            thumbnailUrl: makeSvgThumb('headphones', '#f1f5f9', '#334155', '#6366f1', 'REMOTE URL'),
+            cachedThumbnailPath: null,
+            savedAt: '2026-11-18T14:20:00Z'
+          },
+          {
+            marketplace: 'facebook',
+            marketplaceListingId: 'fb-9002',
+            url: 'https://www.facebook.com/marketplace/item/9002',
+            title: 'Patagonia Nano Puff Vest Bundle (Ask Seller for Price)',
+            price: null,
+            shippingPrice: null,
+            thumbnailUrl: makeSvgThumb('jacket', '#ecfeff', '#0e7490', '#22d3ee', 'CACHED'),
+            cachedThumbnailPath: 'thumbnails/fb-9002.webp',
+            savedAt: '2026-11-17T09:45:00Z'
+          }
+        ],
+        lastRemovedWatchlist: null,
+
+        // Settings
+        settings: {
+          ebayClientId: 'kt31229-UnifiedM-PRD-9f4e2a10c',
+          hasEbaySecret: true,
+          ebaySecretInput: '',
+          showReplaceSecret: false,
+          ebayVerifyNote: 'Production Browse API ready (Account Deletion Exemption)',
+          browserChannel: 'chrome',
+          dataDir: '%LOCALAPPDATA%\\unified-marketplace-search\\',
+          homeZip: '10001',
+          defaultRadiusMiles: 50,
+          facebookRadiusMiles: 500,
+          customHubs: [...DEFAULT_HUBS],
+          newHubInput: '',
+          sessions: {
+            facebook: { label: 'Facebook Marketplace', mode: 'Headed secondary account (guardrails active)', status: 'Signed in' },
+            poshmark: { label: 'Poshmark', mode: 'Guest unauthenticated profile', status: 'Warm profile' },
+            mercari: { label: 'Mercari US', mode: 'Guest unauthenticated profile', status: 'Warm profile' }
+          },
+          serverStatus: 'Running on http://127.0.0.1:4173'
+        }
+      };
+
+      // --- Pure Domain Helpers ---
+      function listingKey(l) {
+        return `${l.marketplace}:${l.marketplaceListingId}`;
+      }
+
+      function isWatchlisted(l) {
+        return state.watchlistEntries.some(w => w.marketplace === l.marketplace && w.marketplaceListingId === l.marketplaceListingId);
+      }
+
+      function getMpMeta(mpId) {
+        return MARKETPLACES.find(m => m.id === mpId) || { id: mpId, label: mpId, short: mpId, badgeClass: '' };
+      }
+
+      function computeTranslationDiagnostics() {
+        const hasFineCondition = state.conditions.some(c => c === 'like_new' || c === 'good' || c === 'fair');
+        const hasAnyCondition = state.conditions.length > 0;
+        const isLocalPickup = state.fulfillment === 'local_pickup';
+        const isShippingOnly = state.fulfillment === 'shipping';
+        const out = {};
+
+        for (const mp of MARKETPLACES) {
+          const armed = state.armedMarketplaces[mp.id];
+          const mState = state.marketplaceStates[mp.id];
+          if (!armed) {
+            out[mp.id] = { code: 'disabled', label: 'Disabled', badgeClass: 'diag-skipped', reason: 'Unchecked in pre-run Marketplace toggles.' };
+            continue;
+          }
+          if (mState.status === 'challenged') {
+            out[mp.id] = { code: 'challenged', label: 'Challenge', badgeClass: 'diag-error', reason: mState.reason || 'Verification challenge detected — 0 automatic retries.' };
+            continue;
+          }
+          if (mState.status === 'checkpoint_aborted') {
+            out[mp.id] = { code: 'checkpoint', label: 'Circuit breaker', badgeClass: 'diag-error', reason: mState.reason || 'Login checkpoint detected — halted sweep cleanly.' };
+            continue;
+          }
+          if (isLocalPickup && (mp.id === 'poshmark' || mp.id === 'mercari')) {
+            out[mp.id] = { code: 'skipped_unsupported', label: 'Skipped (unsupported)', badgeClass: 'diag-skipped', reason: `No local pickup filter on ${mp.label} — skipped.` };
+            continue;
+          }
+          if (hasFineCondition && mp.id === 'ebay') {
+            out[mp.id] = { code: 'broadened', label: 'Broadened', badgeClass: 'diag-broadened', reason: 'Includes category-general Used (3000) so Apparel/Home Listings are not dropped.' };
+            continue;
+          }
+          if (hasFineCondition && mp.id === 'poshmark') {
+            out[mp.id] = { code: 'broadened', label: 'Broadened', badgeClass: 'diag-broadened', reason: 'Queries all pre-owned Listings; fine condition tiers unsupported.' };
+            continue;
+          }
+          if (hasFineCondition && mp.id === 'facebook') {
+            out[mp.id] = { code: 'broadened', label: 'Broadened', badgeClass: 'diag-broadened', reason: 'Mapped to Facebook’s 4-tier condition filter.' };
+            continue;
+          }
+          if (isShippingOnly && mp.id === 'facebook') {
+            out[mp.id] = { code: 'broadened', label: 'Broadened', badgeClass: 'diag-broadened', reason: 'Queries nationwide 500-mi hubs; shipping arranged with seller.' };
+            continue;
+          }
+          if (mp.id === 'facebook' && state.fbSweep.active) {
+            out[mp.id] = { code: 'streaming', label: `City ${state.fbSweep.currentCityIdx} of ${state.fbSweep.totalCities}`, badgeClass: 'diag-streaming', reason: state.fbSweep.cooldownLabel || 'Sequential 1-tab sweep with 3–5s cooldown.' };
+            continue;
+          }
+          if (mp.id === 'facebook' && state.fbSweep.stoppedByUser) {
+            out[mp.id] = { code: 'stopped', label: `Stopped (${state.fbSweep.currentCityIdx}/${state.fbSweep.totalCities} cities)`, badgeClass: 'diag-broadened', reason: 'Sweep stopped early by user; loaded Listings preserved.' };
+            continue;
+          }
+          if (hasAnyCondition && mp.id === 'mercari') {
+            out[mp.id] = { code: 'exact', label: 'Exact', badgeClass: 'diag-exact', reason: '5-tier Condition maps directly to Mercari Marketplace Filters.' };
+            continue;
+          }
+          out[mp.id] = { code: 'exact', label: 'Exact', badgeClass: 'diag-exact', reason: 'All Unified Filters mapped without broadening.' };
+        }
+        return out;
+      }
+
+      function getFilteredAndSortedListings() {
+        const diag = computeTranslationDiagnostics();
+        const pMin = state.priceMin !== '' ? Number(state.priceMin) : null;
+        const pMax = state.priceMax !== '' ? Number(state.priceMax) : null;
+        const condSet = new Set(state.conditions);
+
+        const filtered = state.loadedListings.filter(l => {
+          if (!state.visibleMarketplaces[l.marketplace]) return false;
+          if (!state.queriedMarketplaces[l.marketplace]) return false;
+          if (diag[l.marketplace].code === 'skipped_unsupported') return false;
+          if (pMin !== null && !Number.isNaN(pMin) && l.price < pMin) return false;
+          if (pMax !== null && !Number.isNaN(pMax) && l.price > pMax) return false;
+          if (state.fulfillment === 'local_pickup' && l.shippingType !== 'local_pickup') return false;
+          if (state.fulfillment === 'shipping' && l.shippingType === 'local_pickup') return false;
+          if (l.marketplace === 'facebook' && l.cityHub && !state.selectedHubs.includes(l.cityHub)) return false;
+          if (condSet.size > 0 && !condSet.has(l.conditionTier)) {
+            // For broadened adapters, still honor user's visible filter when strict unless broadened scenario explicitly shows superset note
+            return false;
+          }
+          return true;
+        });
+
+        if (state.sortOrder === 'price_asc' || state.sortOrder === 'price_desc') {
+          const dir = state.sortOrder === 'price_asc' ? 1 : -1;
+          return [...filtered].sort((a, b) => {
+            const totalA = state.includeKnownShipping ? a.price + (a.shippingPrice ?? 0) : a.price;
+            const totalB = state.includeKnownShipping ? b.price + (b.shippingPrice ?? 0) : b.price;
+            if (totalA !== totalB) return (totalA - totalB) * dir;
+            const shipA = a.shippingPrice ?? Number.MAX_SAFE_INTEGER;
+            const shipB = b.shippingPrice ?? Number.MAX_SAFE_INTEGER;
+            return (shipA - shipB) * dir;
+          });
+        }
+
+        // Round-robin interleaving across Marketplaces (and across Facebook City Hubs)
+        const byMp = { ebay: [], poshmark: [], mercari: [], facebook: [] };
+        for (const item of filtered) {
+          byMp[item.marketplace].push(item);
+        }
+        const rankCmp = (a, b) => state.sortOrder === 'newest' ? a.hoursAgo - b.hoursAgo : a.nativeRank - b.nativeRank;
+        for (const mpId of Object.keys(byMp)) {
+          if (mpId === 'facebook') {
+            // Interleave Facebook listings across hubs before Marketplace interleaving
+            const byHub = new Map();
+            for (const fb of byMp.facebook.sort(rankCmp)) {
+              const h = fb.cityHub || 'other';
+              if (!byHub.has(h)) byHub.set(h, []);
+              byHub.get(h).push(fb);
+            }
+            const hubQueues = [...byHub.values()];
+            const interleavedFb = [];
+            let moved = true;
+            while (moved) {
+              moved = false;
+              for (const q of hubQueues) {
+                if (q.length) {
+                  interleavedFb.push(q.shift());
+                  moved = true;
+                }
+              }
+            }
+            byMp.facebook = interleavedFb;
+          } else {
+            byMp[mpId].sort(rankCmp);
+          }
+        }
+
+        const queues = MARKETPLACES.map(m => byMp[m.id]).filter(q => q.length > 0);
+        const merged = [];
+        let more = true;
+        while (more) {
+          more = false;
+          for (const q of queues) {
+            if (q.length) {
+              merged.push(q.shift());
+              more = true;
+            }
+          }
+        }
+        return merged;
+      }
+
+      function getCountsByMarketplace() {
+        const counts = { ebay: 0, poshmark: 0, mercari: 0, facebook: 0 };
+        const diag = computeTranslationDiagnostics();
+        for (const l of state.loadedListings) {
+          if (state.queriedMarketplaces[l.marketplace] && diag[l.marketplace].code !== 'skipped_unsupported') {
+            counts[l.marketplace]++;
+          }
+        }
+        return counts;
+      }
+
+      function getFilteredWatchlist() {
+        let items = state.watchlistEntries.filter(w => state.watchlistFilterMp === 'all' || w.marketplace === state.watchlistFilterMp);
+        if (state.watchlistSort === 'saved_desc') {
+          items = [...items].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+        } else if (state.watchlistSort === 'price_asc' || state.watchlistSort === 'price_desc') {
+          const dir = state.watchlistSort === 'price_asc' ? 1 : -1;
+          items = [...items].sort((a, b) => {
+            if (a.price === null && b.price === null) return 0;
+            if (a.price === null) return 1; // null prices always pushed to bottom
+            if (b.price === null) return -1;
+            return (a.price - b.price) * dir;
+          });
+        }
+        return items;
+      }
+
+      function suggestSavedSearchName() {
+        const base = state.keywords.trim() || 'Filtered Search';
+        const tags = [];
+        if (state.priceMax) tags.push(`Under $${state.priceMax}`);
+        if (state.fulfillment === 'local_pickup') tags.push(`Local ${state.pickupZip}`);
+        if (state.conditions.length === 1) {
+          const c = CONDITION_TIERS.find(t => t.id === state.conditions[0]);
+          if (c) tags.push(c.label);
+        }
+        return tags.length ? `${base} (${tags.join(', ')})` : base;
+      }
+
+      function buildNativeSearchUrl(mpId) {
+        const q = encodeURIComponent(state.keywords.trim() || 'Patagonia Nano Puff');
+        if (mpId === 'ebay') return `https://www.ebay.com/sch/i.html?_nkw=${q}`;
+        if (mpId === 'poshmark') return `https://poshmark.com/search?query=${q}`;
+        if (mpId === 'mercari') return `https://www.mercari.com/search/?keyword=${q}`;
+        return `https://www.facebook.com/marketplace/search/?query=${q}`;
+      }
+
+      function formatPrice(val) {
+        if (val === null || val === undefined || Number.isNaN(Number(val))) return 'Price unlisted';
+        const num = Number(val);
+        return Number.isInteger(num) ? `$${num}` : `$${num.toFixed(2)}`;
+      }
+
+      function formatShipping(l) {
+        if (l.shippingType === 'free') return { text: 'Free shipping', cls: 'ship-badge ship-free' };
+        if (l.shippingType === 'known' && l.shippingPrice !== null) return { text: `+$${Number(l.shippingPrice).toFixed(2)} shipping`, cls: 'ship-badge' };
+        if (l.shippingType === 'local_pickup') return { text: 'Local pickup', cls: 'ship-badge' };
+        return { text: '+ shipping', cls: 'ship-badge' };
+      }
+
+      function formatRelativeTime(iso) {
+        const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+        if (diffMin < 2) return 'Just now';
+        if (diffMin < 60) return `${diffMin}m ago`;
+        const hrs = Math.round(diffMin / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        return `${Math.round(hrs / 24)}d ago`;
+      }
+
+      // --- Interest-Triggered Status Tooltips (modern-web-guidance: interest-triggered-tooltips) ---
+      const ownedHintTriggers = new WeakSet();
+      const tipCloseTimers = new Map();
+
+      function setupHintTooltips() {
+        const supportsPopover = Object.hasOwn(HTMLElement.prototype, 'popover');
+        if (supportsPopover) {
+          const probe = document.createElement('div');
+          probe.popover = 'hint';
+          if (probe.popover !== 'hint') {
+            document.addEventListener('beforetoggle', ({ target, newState }) => {
+              const toggletip = target.getAttribute('popover') === 'hint'
+                && document.querySelector(`[popovertarget="${CSS.escape(target.id)}"]`);
+              if (newState === 'open' && toggletip) {
+                target.popover = 'auto';
+              }
+            }, true);
+          }
+        }
+
+        document.addEventListener('toggle', (e) => {
+          const pop = e.target;
+          if (!pop || !pop.id) return;
+          const isOpen = e.newState === 'open';
+          document.querySelectorAll(`[interestfor="${CSS.escape(pop.id)}"]`).forEach(trigger => {
+            if (ownedHintTriggers.has(trigger)) {
+              trigger.setAttribute('aria-expanded', String(isOpen));
+            }
+          });
+          if (isOpen && pop.classList.contains('status-tooltip')) {
+            const mpId = pop.id.replace('status-tip-', '');
+            const card = document.querySelector(`[data-status-card="${CSS.escape(mpId)}"]`);
+            if (card) {
+              syncTooltipWidth(card, pop);
+              if (!supportsAnchorPos()) positionTooltipFallback(card, pop);
+            }
+          }
+        }, true);
+      }
+
+      function supportsAnchorPos() {
+        return typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('position-area', 'block-end');
+      }
+
+      function supportsAnchorSize() {
+        return typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('width', 'anchor-size(width)');
+      }
+
+      function syncTooltipWidth(card, tip) {
+        if (!card || !tip || typeof card.getBoundingClientRect !== 'function') return;
+        const cr = card.getBoundingClientRect();
+        if (cr.width <= 0) return;
+        const width = Math.min(cr.width, window.innerWidth - 16);
+        if (!supportsAnchorPos() || !supportsAnchorSize()) {
+          tip.style.width = `${width}px`;
+          tip.style.maxWidth = `${width}px`;
+        }
+      }
+
+      function positionTooltipFallback(card, tip) {
+        if (!card || !tip || typeof card.getBoundingClientRect !== 'function') return;
+        const cr = card.getBoundingClientRect();
+        const width = cr.width > 0 ? Math.min(cr.width, window.innerWidth - 16) : Math.min(300, window.innerWidth - 16);
+        const left = Math.max(8, Math.min(cr.left, window.innerWidth - width - 8));
+        const spaceBelow = window.innerHeight - cr.bottom;
+        tip.style.left = `${left}px`;
+        tip.style.width = `${width}px`;
+        tip.style.maxWidth = `${width}px`;
+        if (spaceBelow < 110 && cr.top > 110) {
+          tip.style.top = 'auto';
+          tip.style.bottom = `${window.innerHeight - cr.top + 6}px`;
+        } else {
+          tip.style.bottom = 'auto';
+          tip.style.top = `${cr.bottom + 6}px`;
+        }
+      }
+
+      function syncHintTooltipAria(container) {
+        for (const trigger of container.querySelectorAll('[interestfor]')) {
+          const targetId = trigger.getAttribute('interestfor');
+          const hint = targetId ? document.getElementById(targetId) : null;
+          if (!hint || hint.getAttribute('popover') !== 'hint') continue;
+          const hintText = hint.textContent.replace(/\s+/g, ' ').trim();
+          const triggerLabel = (trigger.getAttribute('aria-label') || trigger.textContent || '').replace(/\s+/g, ' ').trim();
+          if (hintText && hintText === triggerLabel) continue;
+          if (!hint.hasAttribute('role')) hint.setAttribute('role', 'tooltip');
+          const opensOnActivation = trigger.hasAttribute('popovertarget') || trigger.hasAttribute('commandfor');
+          if (opensOnActivation) {
+            if (!trigger.hasAttribute('aria-expanded')) {
+              let open = false;
+              try { open = hint.matches(':popover-open'); } catch { open = hint.classList.contains('tooltip-open'); }
+              trigger.setAttribute('aria-expanded', String(open));
+            }
+            ownedHintTriggers.add(trigger);
+          } else if (!trigger.hasAttribute('aria-describedby')) {
+            trigger.setAttribute('aria-describedby', hint.id);
+          }
+        }
+      }
+
+      function openStatusTooltip(card, tip) {
+        if (!tip) return;
+        const prev = tipCloseTimers.get(tip.id);
+        if (prev) {
+          clearTimeout(prev);
+          tipCloseTimers.delete(tip.id);
+        }
+        syncTooltipWidth(card, tip);
+        if (Object.hasOwn(HTMLElement.prototype, 'popover') && typeof tip.showPopover === 'function') {
+          try { tip.showPopover(); } catch { /* already open */ }
+        } else {
+          tip.classList.add('tooltip-open');
+        }
+        if (!supportsAnchorPos()) positionTooltipFallback(card, tip);
+      }
+
+      function scheduleCloseStatusTooltip(tip, hoverState) {
+        if (!tip) return;
+        const prev = tipCloseTimers.get(tip.id);
+        if (prev) clearTimeout(prev);
+        const timerId = window.setTimeout(() => {
+          tipCloseTimers.delete(tip.id);
+          if (hoverState.trigger || hoverState.tip) return;
+          if (Object.hasOwn(HTMLElement.prototype, 'popover') && typeof tip.hidePopover === 'function') {
+            try { tip.hidePopover(); } catch { /* already closed */ }
+          } else {
+            tip.classList.remove('tooltip-open');
+          }
+        }, 120);
+        tipCloseTimers.set(tip.id, timerId);
+      }
+
+      function wireStatusTooltips() {
+        const root = document.getElementById('app-root');
+        if (!root) return;
+        syncHintTooltipAria(root);
+        for (const infoBtn of root.querySelectorAll('.status-info-btn')) {
+          const tipId = infoBtn.getAttribute('interestfor');
+          const tip = tipId ? document.getElementById(tipId) : null;
+          const card = infoBtn.closest('[data-status-card]');
+          if (!tip || !card) continue;
+          const hoverState = { trigger: false, tip: false };
+          infoBtn.addEventListener('pointerenter', () => {
+            hoverState.trigger = true;
+            openStatusTooltip(card, tip);
+          });
+          infoBtn.addEventListener('pointerleave', () => {
+            hoverState.trigger = false;
+            scheduleCloseStatusTooltip(tip, hoverState);
+          });
+          tip.addEventListener('pointerenter', () => {
+            hoverState.tip = true;
+            openStatusTooltip(card, tip);
+          });
+          tip.addEventListener('pointerleave', () => {
+            hoverState.tip = false;
+            scheduleCloseStatusTooltip(tip, hoverState);
+          });
+        }
+      }
+
+      // --- Persistent Toast Notifications (modern-web-guidance: persistent-toast-notifications) ---
+      let toastTimer = null;
+      let toastPaused = false;
+      let lastPriorFocus = null;
+
+      function announceSr(text) {
+        if (typeof document.ariaNotify === 'function') {
+          document.ariaNotify(text);
+        } else {
+          const live = document.getElementById('sr-live-region');
+          if (live) live.textContent = text;
+        }
+      }
+
+      function showToast(message, { undoAction = null } = {}) {
+        // Do not surface background toasts while a modal dialog is open
+        if (document.querySelector('dialog[open]')) return;
+        const toast = document.getElementById('undo-toast');
+        const msgEl = document.getElementById('undo-toast-msg');
+        const actEl = document.getElementById('undo-toast-action');
+        if (!toast || !msgEl || !actEl) return;
+
+        lastPriorFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        msgEl.textContent = message;
+        if (undoAction) {
+          actEl.hidden = false;
+          actEl.onclick = () => {
+            undoAction();
+            hideToast();
+          };
+        } else {
+          actEl.hidden = true;
+          actEl.onclick = null;
+        }
+
+        if (Object.hasOwn(HTMLElement.prototype, 'popover')) {
+          try { toast.showPopover(); } catch { /* already open */ }
+        } else {
+          toast.classList.add('toast-visible');
+        }
+
+        announceSr(undoAction ? `${message} Actions available` : message);
+        scheduleToastDismiss();
+      }
+
+      function hideToast() {
+        if (toastTimer) {
+          clearTimeout(toastTimer);
+          toastTimer = null;
+        }
+        const toast = document.getElementById('undo-toast');
+        if (!toast) return;
+        if (Object.hasOwn(HTMLElement.prototype, 'popover')) {
+          try { toast.hidePopover(); } catch { /* already hidden */ }
+        } else {
+          toast.classList.remove('toast-visible');
+        }
+        if (lastPriorFocus && lastPriorFocus.isConnected) {
+          lastPriorFocus.focus();
+        }
+      }
+
+      function scheduleToastDismiss() {
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => {
+          const toast = document.getElementById('undo-toast');
+          if (!toast) return;
+          if (toastPaused || toast.contains(document.activeElement)) {
+            scheduleToastDismiss();
+            return;
+          }
+          hideToast();
+        }, 7000);
+      }
+
+      function setupToastLifecycle() {
+        const toast = document.getElementById('undo-toast');
+        const closeBtn = document.getElementById('undo-toast-close');
+        if (!toast) return;
+        toast.addEventListener('pointerenter', () => { toastPaused = true; });
+        toast.addEventListener('pointerleave', () => { toastPaused = false; scheduleToastDismiss(); });
+        toast.addEventListener('focusin', () => { toastPaused = true; });
+        toast.addEventListener('focusout', () => { toastPaused = false; scheduleToastDismiss(); });
+        if (closeBtn && !Object.hasOwn(HTMLElement.prototype, 'popover')) {
+          closeBtn.addEventListener('click', hideToast);
+        }
+      }
+
+      // --- Native Modal Dialog Helpers (modern-web-guidance: dialog) ---
+      let confirmHandler = null;
+      let renameHandler = null;
+      let saveNewHandler = null;
+
+      function setupDialogs() {
+        // Fallback light-dismiss for closedby="any" where unsupported
+        if (!('closedBy' in HTMLDialogElement.prototype)) {
+          const outside = (e, dialog) => {
+            const r = dialog.getBoundingClientRect();
+            return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+          };
+          for (const dialog of document.querySelectorAll('dialog[closedby="any"]')) {
+            let pressedOutside = false;
+            dialog.addEventListener('pointerdown', (e) => { pressedOutside = outside(e, dialog); });
+            dialog.addEventListener('pointerup', (e) => { if (pressedOutside && outside(e, dialog)) dialog.close(); });
+          }
+        }
+
+        const cDlg = document.getElementById('confirm-dialog');
+        cDlg.addEventListener('close', () => {
+          const val = cDlg.returnValue;
+          cDlg.returnValue = '';
+          if (val === 'confirm' && confirmHandler) confirmHandler();
+          confirmHandler = null;
+        });
+
+        const rDlg = document.getElementById('rename-dialog');
+        rDlg.addEventListener('close', () => {
+          const val = rDlg.returnValue;
+          rDlg.returnValue = '';
+          const input = document.getElementById('rename-dialog-input');
+          if (val === 'confirm' && renameHandler && input.value.trim()) {
+            renameHandler(input.value.trim());
+          }
+          renameHandler = null;
+        });
+
+        const sDlg = document.getElementById('save-new-dialog');
+        sDlg.addEventListener('close', () => {
+          const val = sDlg.returnValue;
+          sDlg.returnValue = '';
+          const input = document.getElementById('save-new-dialog-input');
+          if (val === 'confirm' && saveNewHandler && input.value.trim()) {
+            saveNewHandler(input.value.trim());
+          }
+          saveNewHandler = null;
+        });
+      }
+
+      function openConfirmDialog({ title, body, submitLabel, onConfirm }) {
+        const dlg = document.getElementById('confirm-dialog');
+        document.getElementById('confirm-dialog-title').textContent = title;
+        document.getElementById('confirm-dialog-body').textContent = body;
+        document.getElementById('confirm-dialog-submit').textContent = submitLabel;
+        confirmHandler = onConfirm;
+        dlg.showModal();
+      }
+
+      function openRenameDialog(currentName, onSave) {
+        const dlg = document.getElementById('rename-dialog');
+        const input = document.getElementById('rename-dialog-input');
+        input.value = currentName;
+        renameHandler = onSave;
+        dlg.showModal();
+        input.select();
+      }
+
+      function openSaveNewDialog(onSave) {
+        const dlg = document.getElementById('save-new-dialog');
+        const input = document.getElementById('save-new-dialog-input');
+        input.value = suggestSavedSearchName();
+        saveNewHandler = onSave;
+        dlg.showModal();
+        input.select();
+      }
+
+      // --- Search Execution, Scenario & Streaming Actions ---
+      let sweepInterval = null;
+
+      function stopSweepTimer() {
+        if (sweepInterval) {
+          clearInterval(sweepInterval);
+          sweepInterval = null;
+        }
+      }
+
+      function applyScenario(scenarioId, { preserveQuery = false } = {}) {
+        stopSweepTimer();
+        state.scenario = scenarioId;
+        state.pendingBuffer = [];
+        state.bufferLatched = false;
+        state.keywordError = '';
+
+        if (!preserveQuery) {
+          state.keywords = 'Patagonia Nano Puff jacket';
+          state.priceMin = '';
+          state.priceMax = '';
+          state.armedMarketplaces = { ebay: true, poshmark: true, mercari: true, facebook: true };
+          state.queriedMarketplaces = { ebay: true, poshmark: true, mercari: true, facebook: true };
+          state.visibleMarketplaces = { ebay: true, poshmark: true, mercari: true, facebook: true };
+        }
+
+        const pool = buildQueryPool(state.keywords);
+        state.extraPool = pool.extra;
+        state.marketplaceStates = {
+          ebay: { status: 'ready', sessionReady: true, reason: '', count: 0 },
+          poshmark: { status: 'ready', sessionReady: true, reason: '', count: 0 },
+          mercari: { status: 'ready', sessionReady: true, reason: '', count: 0 },
+          facebook: { status: 'ready', sessionReady: true, reason: '', count: 0 }
+        };
+
+        if (scenarioId === 'local_pickup') {
+          state.conditions = [];
+          state.fulfillment = 'local_pickup';
+          state.fbSweep = { active: false, currentCityIdx: 8, totalCities: 8, stoppedByUser: false, cooldownLabel: '' };
+          state.loadedListings = pool.initial;
+        } else if (scenarioId === 'broadened') {
+          state.conditions = ['like_new', 'good'];
+          state.fulfillment = 'any';
+          state.fbSweep = { active: false, currentCityIdx: 8, totalCities: 8, stoppedByUser: false, cooldownLabel: '' };
+          state.loadedListings = pool.initial;
+        } else if (scenarioId === 'partial_failure') {
+          state.conditions = [];
+          state.fulfillment = 'any';
+          state.marketplaceStates.mercari = {
+            status: 'challenged',
+            sessionReady: false,
+            reason: 'Cloudflare verification challenge on searchFacetQuery — 0 automatic retries.',
+            count: 0
+          };
+          state.marketplaceStates.facebook = {
+            status: 'checkpoint_aborted',
+            sessionReady: false,
+            reason: 'Login checkpoint detected on City 4 of 8 (Denver) — circuit breaker halted sweep; 3 prior cities preserved.',
+            count: 3
+          };
+          state.fbSweep = { active: false, currentCityIdx: 3, totalCities: 8, stoppedByUser: false, cooldownLabel: '' };
+          // Keep eBay, Poshmark, and first 3 Facebook cities; omit Mercari & remaining FB cities until retried
+          state.loadedListings = pool.initial.filter(l => {
+            if (l.marketplace === 'mercari') return false;
+            if (l.marketplace === 'facebook' && !['seattle', 'sanfrancisco', 'losangeles'].includes(l.cityHub)) return false;
+            return true;
+          });
+        } else {
+          // Normal 8-city sweep (starts at City 3 of 8 sweeping in progress so user sees live progress + Stop button)
+          state.conditions = [];
+          state.fulfillment = 'any';
+          state.loadedListings = pool.initial.filter(l => l.marketplace !== 'facebook' || ['seattle', 'sanfrancisco', 'losangeles'].includes(l.cityHub));
+          state.fbSweep = { active: true, currentCityIdx: 3, totalCities: 8, stoppedByUser: false, cooldownLabel: 'Sweeping Denver next (3–5s cooldown)' };
+        }
+        render();
+      }
+
+      function runLiveSearch({ fromSaved = false } = {}) {
+        const trimmed = state.keywords.trim();
+        if (!trimmed) {
+          state.keywordError = 'Enter keywords to search across Marketplaces.';
+          render();
+          return;
+        }
+        state.keywordError = '';
+        stopSweepTimer();
+        state.pendingBuffer = [];
+        state.bufferLatched = false;
+        state.queriedMarketplaces = { ...state.armedMarketplaces };
+        state.visibleMarketplaces = { ...state.armedMarketplaces };
+
+        const pool = buildQueryPool(trimmed);
+        state.extraPool = pool.extra;
+        for (const mp of MARKETPLACES) {
+          state.marketplaceStates[mp.id].status = 'ready';
+          state.marketplaceStates[mp.id].reason = '';
+        }
+
+        if (state.armedMarketplaces.facebook && state.selectedHubs.length > 0 && state.fulfillment !== 'local_pickup') {
+          state.fbSweep = {
+            active: true,
+            currentCityIdx: 1,
+            totalCities: state.selectedHubs.length,
+            stoppedByUser: false,
+            cooldownLabel: `City 1 of ${state.selectedHubs.length} (${getHubLabel(state.selectedHubs[0])}) · 3–5s cooldown`
+          };
+          const firstHub = state.selectedHubs[0];
+          state.loadedListings = pool.initial.filter(l => l.marketplace !== 'facebook' || l.cityHub === firstHub);
+          startSimulatedSweep();
+        } else {
+          state.fbSweep = { active: false, currentCityIdx: state.selectedHubs.length, totalCities: state.selectedHubs.length, stoppedByUser: false, cooldownLabel: '' };
+          state.loadedListings = pool.initial;
+        }
+
+        if (!fromSaved && state.activeSavedSearchId) {
+          // Keep dirty state untouched if edited, otherwise clear
+        }
+        render();
+      }
+
+      function startSimulatedSweep() {
+        stopSweepTimer();
+        sweepInterval = window.setInterval(() => {
+          if (!state.fbSweep.active) {
+            stopSweepTimer();
+            return;
+          }
+          if (state.fbSweep.currentCityIdx >= state.fbSweep.totalCities) {
+            state.fbSweep.active = false;
+            state.fbSweep.cooldownLabel = '';
+            stopSweepTimer();
+            render();
+            return;
+          }
+          streamNextBatch({ silentIfEmpty: true });
+        }, 3800);
+      }
+
+      function streamNextBatch({ silentIfEmpty = false } = {}) {
+        const incoming = [];
+        // Advance Facebook city sweep if active
+        if (state.fbSweep.active && state.fbSweep.currentCityIdx < state.fbSweep.totalCities) {
+          const nextHubSlug = state.selectedHubs[state.fbSweep.currentCityIdx] || 'denver';
+          state.fbSweep.currentCityIdx += 1;
+          const pool = buildQueryPool(state.keywords);
+          const candidateFb = [...pool.initial, ...pool.extra].filter(
+            l => l.marketplace === 'facebook' &&
+            l.cityHub === nextHubSlug &&
+            !state.loadedListings.some(ex => listingKey(ex) === listingKey(l)) &&
+            !state.pendingBuffer.some(ex => listingKey(ex) === listingKey(l))
+          );
+          if (candidateFb.length > 0) {
+            incoming.push(...candidateFb);
+          } else {
+            incoming.push({
+              marketplace: 'facebook',
+              marketplaceListingId: `fb-hub-${nextHubSlug}-${Date.now()}`,
+              cityHub: nextHubSlug,
+              title: `${state.keywords.trim()} (${getHubLabel(nextHubSlug)} Hub)`,
+              price: 89,
+              shippingPrice: 0,
+              shippingType: 'local_pickup',
+              listingFormat: 'FIXED_PRICE',
+              conditionTier: 'good',
+              conditionLabel: 'Used - Good',
+              locationLabel: getHubLabel(nextHubSlug),
+              nativeRank: 2,
+              hoursAgo: 0.2,
+              thumb: makeSvgThumb('jacket', '#ecfeff', '#0e7490', '#22d3ee', nextHubSlug.toUpperCase()),
+              url: `https://www.facebook.com/marketplace/search/?query=${encodeURIComponent(state.keywords)}`
+            });
+          }
+          if (state.fbSweep.currentCityIdx >= state.fbSweep.totalCities) {
+            state.fbSweep.active = false;
+            state.fbSweep.cooldownLabel = '';
+            stopSweepTimer();
+          } else {
+            const upcomingSlug = state.selectedHubs[state.fbSweep.currentCityIdx];
+            state.fbSweep.cooldownLabel = `Next: ${getHubLabel(upcomingSlug)} (3–5s cooldown)`;
+          }
+        }
+
+        // Also pull up to 2 extra non-Facebook Listings when triggered manually or if pool remains
+        const extraNonFb = state.extraPool.splice(0, 2);
+        incoming.push(...extraNonFb);
+
+        if (incoming.length === 0) {
+          // Synthesize 2 fresh Listings so "+ Stream Batch" always demonstrates scroll-safe merge
+          const idNum = Math.floor(Math.random() * 900) + 5000;
+          incoming.push(
+            {
+              marketplace: 'ebay',
+              marketplaceListingId: `eb-${idNum}`,
+              title: `${state.keywords.trim()} — Fresh Drop #${idNum}`,
+              price: 99,
+              shippingPrice: 0,
+              shippingType: 'free',
+              listingFormat: 'FIXED_PRICE',
+              conditionTier: 'like_new',
+              conditionLabel: 'Like New',
+              locationLabel: 'Seattle, WA',
+              nativeRank: 1,
+              hoursAgo: 0.1,
+              thumb: makeSvgThumb('jacket', '#dbeafe', '#1d4ed8', '#60a5fa', 'NEW DROP'),
+              url: `https://www.ebay.com/itm/${idNum}`
+            },
+            {
+              marketplace: 'poshmark',
+              marketplaceListingId: `pm-${idNum + 1}`,
+              title: `${state.keywords.trim()} — Newly Listed #${idNum + 1}`,
+              price: 87,
+              shippingPrice: 7.97,
+              shippingType: 'known',
+              listingFormat: 'FIXED_PRICE',
+              conditionTier: 'good',
+              conditionLabel: 'Pre-owned (Poshmark)',
+              locationLabel: 'Denver, CO',
+              nativeRank: 1,
+              hoursAgo: 0.1,
+              thumb: makeSvgThumb('jacket', '#fdf2f8', '#9d174d', '#f472b6', 'NEW DROP'),
+              url: `https://poshmark.com/listing/${idNum + 1}`
+            }
+          );
+        }
+
+        if (incoming.length === 0 && silentIfEmpty) return;
+
+        const tagged = incoming.map(l => ({ ...l, isNew: true }));
+        if (state.bufferLatched || window.scrollY > 450 || state.pendingBuffer.length > 0) {
+          state.pendingBuffer.push(...tagged);
+          updateScrollPill();
+        } else {
+          mergeNewListings(tagged);
+        }
+        render();
+      }
+
+      function mergeNewListings(items) {
+        for (const item of items) {
+          const key = listingKey(item);
+          if (!state.loadedListings.some(x => listingKey(x) === key)) {
+            state.loadedListings.unshift({ ...item, isNew: true });
+          }
+        }
+      }
+
+      function flushPendingBuffer() {
+        if (state.pendingBuffer.length === 0) return;
+        const batch = state.pendingBuffer.splice(0);
+        mergeNewListings(batch);
+        state.bufferLatched = window.scrollY > 450;
+        updateScrollPill();
+        render();
+      }
+
+      function loadMoreListings() {
+        const next = state.extraPool.splice(0, 4);
+        if (next.length === 0) {
+          showToast('All seeded Listings for this search are already loaded.');
+          return;
+        }
+        for (const item of next) {
+          if (!state.loadedListings.some(x => listingKey(x) === listingKey(item))) {
+            state.loadedListings.push(item);
+          }
+        }
+        render();
+      }
+
+      function stopFacebookSweep() {
+        stopSweepTimer();
+        state.fbSweep.active = false;
+        state.fbSweep.stoppedByUser = true;
+        state.fbSweep.cooldownLabel = '';
+        render();
+      }
+
+      function querySingleMarketplace(mpId) {
+        state.queriedMarketplaces[mpId] = true;
+        state.visibleMarketplaces[mpId] = true;
+        state.marketplaceStates[mpId].status = 'ready';
+        state.marketplaceStates[mpId].reason = '';
+        const pool = buildQueryPool(state.keywords);
+        const recovered = [...pool.initial, ...pool.extra].filter(l => l.marketplace === mpId);
+        for (const item of recovered) {
+          if (!state.loadedListings.some(x => listingKey(x) === listingKey(item))) {
+            state.loadedListings.push({ ...item, isNew: true });
+          }
+        }
+        if (mpId === 'facebook') {
+          state.fbSweep = { active: false, currentCityIdx: state.selectedHubs.length, totalCities: state.selectedHubs.length, stoppedByUser: false, cooldownLabel: '' };
+        }
+        showToast(`Merged ${getMpMeta(mpId).label} Listings.`);
+        render();
+      }
+
+      function toggleWatchlist(l) {
+        const idx = state.watchlistEntries.findIndex(w => w.marketplace === l.marketplace && w.marketplaceListingId === l.marketplaceListingId);
+        if (idx >= 0) {
+          const removed = state.watchlistEntries.splice(idx, 1)[0];
+          state.lastRemovedWatchlist = removed;
+          showToast(`Removed "${removed.title.slice(0, 34)}…" from Watchlist.`, {
+            undoAction: () => {
+              if (!state.watchlistEntries.some(w => w.marketplace === removed.marketplace && w.marketplaceListingId === removed.marketplaceListingId)) {
+                state.watchlistEntries.unshift(removed);
+                render();
+              }
+            }
+          });
+        } else {
+          state.watchlistEntries.unshift({
+            marketplace: l.marketplace,
+            marketplaceListingId: l.marketplaceListingId,
+            url: l.url,
+            title: l.title,
+            price: l.price,
+            shippingPrice: l.shippingPrice,
+            thumbnailUrl: l.thumb || '',
+            brokenThumb: Boolean(l.brokenThumb),
+            cachedThumbnailPath: l.brokenThumb ? null : `thumbnails/${l.marketplaceListingId}.webp`,
+            savedAt: new Date().toISOString()
+          });
+          showToast('Added to Watchlist.');
+        }
+        render();
+      }
+
+      function removeWatchlistEntry(marketplace, marketplaceListingId) {
+        const idx = state.watchlistEntries.findIndex(w => w.marketplace === marketplace && w.marketplaceListingId === marketplaceListingId);
+        if (idx < 0) return;
+        const removed = state.watchlistEntries.splice(idx, 1)[0];
+        showToast(`Removed from Watchlist.`, {
+          undoAction: () => {
+            if (!state.watchlistEntries.some(w => w.marketplace === removed.marketplace && w.marketplaceListingId === removed.marketplaceListingId)) {
+              state.watchlistEntries.unshift(removed);
+              render();
+            }
+          }
+        });
+        render();
+      }
+
+      // --- Saved Search Lifecycle ---
+      function getOrderedSavedSearches() {
+        return [...state.savedSearches];
+      }
+
+      function markDirtyIfActiveSaved() {
+        if (state.activeSavedSearchId) {
+          state.savedSearchDirty = true;
+        }
+      }
+
+      function loadAndRunSavedSearch(id) {
+        const ss = state.savedSearches.find(s => s.id === id);
+        if (!ss) return;
+        state.activeSavedSearchId = ss.id;
+        state.savedSearchDirty = false;
+        state.keywords = ss.keywords;
+        state.priceMin = ss.unifiedFilters.priceMin || '';
+        state.priceMax = ss.unifiedFilters.priceMax || '';
+        state.conditions = [...ss.unifiedFilters.conditions];
+        state.fulfillment = ss.unifiedFilters.fulfillment || 'any';
+        state.pickupZip = ss.unifiedFilters.pickupZip || state.settings.homeZip;
+        state.pickupRadiusMiles = ss.unifiedFilters.pickupRadiusMiles || state.settings.defaultRadiusMiles;
+        state.selectedHubs = [...(ss.unifiedFilters.selectedHubs || state.settings.customHubs.map(h => h.slug))];
+        state.sortOrder = ss.sortOrder || 'relevance';
+        for (const mp of MARKETPLACES) {
+          state.armedMarketplaces[mp.id] = ss.marketplaces.includes(mp.id);
+        }
+        ss.lastRunAt = new Date().toISOString();
+        state.view = 'search';
+        runLiveSearch({ fromSaved: true });
+      }
+
+      function updateActiveSavedSearch() {
+        const ss = state.savedSearches.find(s => s.id === state.activeSavedSearchId);
+        if (!ss) return;
+        ss.keywords = state.keywords.trim();
+        ss.unifiedFilters = {
+          priceMin: state.priceMin,
+          priceMax: state.priceMax,
+          conditions: [...state.conditions],
+          fulfillment: state.fulfillment,
+          pickupZip: state.pickupZip,
+          pickupRadiusMiles: state.pickupRadiusMiles,
+          selectedHubs: [...state.selectedHubs]
+        };
+        ss.marketplaces = MARKETPLACES.filter(m => state.armedMarketplaces[m.id]).map(m => m.id);
+        ss.sortOrder = state.sortOrder;
+        ss.lastRunAt = new Date().toISOString();
+        state.savedSearchDirty = false;
+        showToast(`Updated Saved Search "${ss.name}".`);
+        render();
+      }
+
+      function saveAsNewSavedSearch() {
+        const hasKeywords = state.keywords.trim().length > 0;
+        const hasFilter = Boolean(state.priceMin || state.priceMax || state.conditions.length || state.fulfillment !== 'any');
+        if (!hasKeywords && !hasFilter) {
+          state.keywordError = 'Saving requires keywords or at least one Unified Filter.';
+          render();
+          return;
+        }
+        openSaveNewDialog((name) => {
+          const now = new Date().toISOString();
+          const newId = `ss-${Date.now()}`;
+          state.savedSearches.unshift({
+            id: newId,
+            name,
+            keywords: state.keywords.trim(),
+            unifiedFilters: {
+              priceMin: state.priceMin,
+              priceMax: state.priceMax,
+              conditions: [...state.conditions],
+              fulfillment: state.fulfillment,
+              pickupZip: state.pickupZip,
+              pickupRadiusMiles: state.pickupRadiusMiles,
+              selectedHubs: [...state.selectedHubs]
+            },
+            marketplaces: MARKETPLACES.filter(m => state.armedMarketplaces[m.id]).map(m => m.id),
+            sortOrder: state.sortOrder,
+            createdAt: now,
+            lastRunAt: now
+          });
+          state.activeSavedSearchId = newId;
+          state.savedSearchDirty = false;
+          showToast(`Saved "${name}".`);
+          render();
+        });
+      }
+
+      function promptDeleteSavedSearch(id) {
+        const ss = state.savedSearches.find(s => s.id === id);
+        if (!ss) return;
+        openConfirmDialog({
+          title: 'Delete Saved Search?',
+          body: `Remove "${ss.name}" from your Saved Searches? Listings in your Watchlist are not affected.`,
+          submitLabel: 'Delete',
+          onConfirm: () => {
+            state.savedSearches = state.savedSearches.filter(s => s.id !== id);
+            if (state.activeSavedSearchId === id) {
+              state.activeSavedSearchId = null;
+              state.savedSearchDirty = false;
+            }
+            showToast(`Deleted "${ss.name}".`);
+            render();
+          }
+        });
+      }
+
+      function promptRenameSavedSearch(id) {
+        const ss = state.savedSearches.find(s => s.id === id);
+        if (!ss) return;
+        openRenameDialog(ss.name, (newName) => {
+          ss.name = newName;
+          showToast(`Renamed Saved Search to "${newName}".`);
+          render();
+        });
+      }
+
+      function getHubLabel(slug) {
+        const found = state.settings.customHubs.find(h => h.slug === slug);
+        return found ? found.label : slug;
+      }
+
+      // --- HTML Escaping ---
+      function esc(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      // --- Shared HTML Fragment Builders ---
+      function renderThumbHtml(item, fallbackCaption = 'Preview expired') {
+        if (item.brokenThumb || !item.thumb && !item.thumbnailUrl) {
+          return `
+            <div class="thumb-placeholder" aria-label="${esc(fallbackCaption)}">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2"/>
+                <path d="M3 16l5-5 4 4 3-3 6 6"/>
+                <line x1="2" y1="2" x2="22" y2="22"/>
+              </svg>
+              <span>${esc(fallbackCaption)}</span>
+            </div>`;
+        }
+        const src = item.thumb || item.thumbnailUrl;
+        return `<img src="${esc(src)}" alt="" loading="lazy">`;
+      }
+
+      function renderNavHtml() {
+        const wcCount = state.watchlistEntries.length;
+        return `
+          <nav class="nav-pills" aria-label="Primary">
+            <button type="button" class="nav-btn" data-nav="search" ${state.view === 'search' ? 'aria-current="page"' : ''}>Search</button>
+            <button type="button" class="nav-btn" data-nav="watchlist" ${state.view === 'watchlist' ? 'aria-current="page"' : ''}>Watchlist (${wcCount})</button>
+            <button type="button" class="nav-btn" data-nav="settings" ${state.view === 'settings' ? 'aria-current="page"' : ''}>Settings</button>
+          </nav>`;
+      }
+
+      function renderUnifiedFiltersHtml({ compact = false, sectionPrefix = 'f' } = {}) {
+        const hubs = state.settings.customHubs;
+        return `
+          <div style="display:flex; flex-direction:column; gap:${compact ? '10px' : '14px'};">
+            <div class="filter-section">
+              <span class="filter-label">Price (USD base price)</span>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                <input type="number" min="0" class="input tabular" placeholder="Min $" value="${esc(state.priceMin)}" data-filter-input="priceMin" aria-label="Minimum price">
+                <input type="number" min="0" class="input tabular" placeholder="Max $" value="${esc(state.priceMax)}" data-filter-input="priceMax" aria-label="Maximum price">
+              </div>
+            </div>
+
+            <div class="filter-section">
+              <span class="filter-label">Condition (5-tier)</span>
+              <div class="${compact ? 'chip-group' : 'check-list'}">
+                ${CONDITION_TIERS.map(c => {
+                  const checked = state.conditions.includes(c.id);
+                  return compact
+                    ? `<button type="button" class="toggle-pill" data-cond-toggle="${c.id}" aria-pressed="${checked}">${esc(c.label)}</button>`
+                    : `<label class="check-row"><input type="checkbox" data-cond-check="${c.id}" ${checked ? 'checked' : ''}><span>${esc(c.label)}</span></label>`;
+                }).join('')}
+              </div>
+            </div>
+
+            <div class="filter-section">
+              <span class="filter-label">Fulfillment</span>
+              <div class="check-list">
+                ${[
+                  { id: 'any', label: 'Any (Shipping or Pickup)' },
+                  { id: 'shipping', label: 'Shipping only' },
+                  { id: 'local_pickup', label: 'Local pickup only' }
+                ].map(f => `
+                  <label class="check-row">
+                    <input type="radio" name="${sectionPrefix}-fulfillment" value="${f.id}" data-fulfill-radio="${f.id}" ${state.fulfillment === f.id ? 'checked' : ''}>
+                    <span>${esc(f.label)}</span>
+                  </label>
+                `).join('')}
+              </div>
+              ${state.fulfillment === 'local_pickup' ? `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:4px;">
+                  <input type="text" class="input tabular" value="${esc(state.pickupZip)}" data-filter-input="pickupZip" placeholder="ZIP" aria-label="Pickup ZIP code">
+                  <select class="select tabular" data-filter-select="pickupRadiusMiles" aria-label="Pickup radius">
+                    ${[10, 25, 50, 100].map(r => `<option value="${r}" ${Number(state.pickupRadiusMiles) === r ? 'selected' : ''}>${r} mi</option>`).join('')}
+                  </select>
+                </div>
+              ` : ''}
+            </div>
+
+            <div class="filter-section">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="filter-label">Facebook City Hubs (${state.selectedHubs.length}/${hubs.length})</span>
+                <span style="font-size:11px; color:var(--text-soft);">${state.settings.facebookRadiusMiles} mi</span>
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                ${hubs.map(h => {
+                  const on = state.selectedHubs.includes(h.slug);
+                  return `<button type="button" class="toggle-pill" style="padding:3px 8px; font-size:11.5px;" data-hub-toggle="${esc(h.slug)}" aria-pressed="${on}">${esc(h.label.split(',')[0])}</button>`;
+                }).join('')}
+              </div>
+            </div>
+          </div>`;
+      }
+
+      function renderSavedSearchesHtml() {
+        const ordered = getOrderedSavedSearches();
+        const activeSs = state.savedSearches.find(s => s.id === state.activeSavedSearchId);
+        return `
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+              <span class="filter-label">Saved Searches</span>
+              <button type="button" class="btn btn-xs btn-primary" data-action="save-new">+ Save Search</button>
+            </div>
+            ${activeSs && state.savedSearchDirty ? `
+              <div style="background:var(--warn-bg); border:1px solid var(--warn-border); border-radius:var(--radius-sm); padding:8px; display:flex; flex-direction:column; gap:6px; font-size:12px;">
+                <div style="font-weight:600; color:var(--warn);">Modified "${esc(activeSs.name)}" (not auto-saved)</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                  <button type="button" class="btn btn-xs btn-primary" data-action="update-saved">Update Saved Search</button>
+                  <button type="button" class="btn btn-xs" data-action="save-new">Save as New</button>
+                </div>
+              </div>
+            ` : ''}
+            <div class="saved-list">
+              ${ordered.length === 0 ? `<div style="font-size:12px; color:var(--text-soft);">No Saved Searches yet.</div>` : ordered.map(ss => {
+                const isActive = ss.id === state.activeSavedSearchId;
+                return `
+                  <div class="saved-item ${isActive ? 'active' : ''}">
+                    <div class="saved-item-top">
+                      <div class="saved-name-group">
+                        <button type="button" class="saved-run-btn" data-run-saved="${ss.id}" title="Load and run Saved Search">${esc(ss.name)}</button>
+                        <button type="button" class="saved-icon-btn" data-rename-saved="${ss.id}" aria-label="Rename ${esc(ss.name)}" title="Rename Saved Search">
+                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L7.5 10.5l-2.8.7.7-2.8 6.1-5.9Z"/>
+                            <path d="M13 8.5v4A1.5 1.5 0 0 1 11.5 14h-8A1.5 1.5 0 0 1 2 12.5v-8A1.5 1.5 0 0 1 3.5 3h4"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <button type="button" class="saved-icon-btn saved-icon-delete" data-delete-saved="${ss.id}" aria-label="Delete ${esc(ss.name)}" title="Delete Saved Search">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+                          <line x1="4" y1="4" x2="12" y2="12"/>
+                          <line x1="12" y1="4" x2="4" y2="12"/>
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="saved-meta-line">
+                      <span>${ss.marketplaces.length} Marketplaces · ${SORT_OPTIONS.find(o => o.id === ss.sortOrder)?.label.split(' ')[0] || 'Relevance'}</span>
+                      <span style="white-space:nowrap;">${formatRelativeTime(ss.lastRunAt || ss.createdAt)}</span>
+                    </div>
+                  </div>`;
+              }).join('')}
+            </div>
+          </div>`;
+      }
+
+      function renderStatusCardHtml(mp) {
+        const diag = computeTranslationDiagnostics()[mp.id];
+        const mState = state.marketplaceStates[mp.id];
+        const counts = getCountsByMarketplace();
+        const isArmed = state.armedMarketplaces[mp.id];
+        const wasQueried = state.queriedMarketplaces[mp.id];
+        const isFail = diag.code === 'challenged' || diag.code === 'checkpoint';
+        const showUnqueriedPrompt = isArmed && !wasQueried;
+        const countLabel = wasQueried && !isFail && diag.code !== 'skipped_unsupported' ? ` (${counts[mp.id]} Listings)` : '';
+        const diagText = showUnqueriedPrompt ? 'Enabled after last search — not yet queried.' : diag.reason;
+        const tipId = `status-tip-${mp.id}`;
+        const hasActions = showUnqueriedPrompt || isFail;
+        const isFbSweeping = mp.id === 'facebook' && state.fbSweep.active;
+
+        return `
+          <div class="status-card ${isFail ? 'status-failed' : ''}" data-status-card="${mp.id}" style="anchor-name: --status-card-${mp.id};">
+            <div class="status-card-head">
+              <div style="display:flex; align-items:center; gap:5px; min-width:0;">
+                <span class="badge ${mp.badgeClass}">${esc(mp.label)}</span>
+                ${isFbSweeping ? `
+                  <button type="button" class="fb-sweep-stop-btn" data-action="stop-fb-sweep" aria-label="Stop Facebook sweep" title="Stop Facebook sweep">
+                    <svg class="fb-spinner-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-opacity="0.25" stroke-width="2"/>
+                      <path d="M8 2.5A5.5 5.5 0 0 1 13.5 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <svg class="fb-stop-icon" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                      <line x1="4.5" y1="4.5" x2="11.5" y2="11.5"/>
+                      <line x1="11.5" y1="4.5" x2="4.5" y2="11.5"/>
+                    </svg>
+                  </button>
+                ` : ''}
+                ${wasQueried && !isFail && diag.code !== 'skipped_unsupported' ? `<span class="status-count tabular">(${counts[mp.id]})</span>` : ''}
+              </div>
+              <div class="status-card-badges">
+                <span class="badge ${diag.badgeClass}">${esc(diag.label)}</span>
+                <button type="button" class="status-info-btn" interestfor="${tipId}" popovertarget="${tipId}" popovertargetaction="show" aria-label="${esc(mp.label)} status details" aria-expanded="false">i</button>
+                <div id="${tipId}" popover="hint" role="tooltip" class="status-diag status-tooltip" style="position-anchor: --status-card-${mp.id};">
+                  <strong>${esc(mp.label)}</strong>: ${esc(diagText)}${esc(countLabel)}
+                </div>
+              </div>
+            </div>
+            ${hasActions ? `
+              <div class="status-actions">
+                ${showUnqueriedPrompt ? `
+                  <button type="button" class="btn btn-xs btn-primary" data-query-mp="${mp.id}">Query ${esc(mp.short)} now</button>
+                ` : ''}
+                ${isFail ? `
+                  <a class="btn btn-xs" href="${esc(buildNativeSearchUrl(mp.id))}" target="_blank" rel="noopener noreferrer">Open on ${esc(mp.short)} ↗</a>
+                  <button type="button" class="btn btn-xs" data-open-session="${mp.id}">${mState.sessionReady ? 'Session ready ✓' : 'Open browser session'}</button>
+                  <button type="button" class="btn btn-xs btn-primary" data-retry-mp="${mp.id}">Retry ${esc(mp.short)}</button>
+                ` : ''}
+              </div>
+            ` : ''}
+          </div>`;
+      }
+
+      function renderPostRunToolbarHtml() {
+        const counts = getCountsByMarketplace();
+        const unqueriedArmed = MARKETPLACES.filter(m => state.armedMarketplaces[m.id] && !state.queriedMarketplaces[m.id]);
+        return `
+          <div class="toolbar-bar">
+            <div class="mp-switch-group">
+              <span class="mp-switch-label">Show queried:</span>
+              ${MARKETPLACES.map(mp => {
+                const queried = state.queriedMarketplaces[mp.id];
+                const vis = state.visibleMarketplaces[mp.id];
+                return `
+                  <button type="button" class="toggle-pill" data-vis-mp="${mp.id}" aria-pressed="${queried && vis}" ${!queried ? 'disabled title="Not queried in this search run"' : ''}>
+                    ${esc(mp.short)} <span class="tabular">(${queried ? counts[mp.id] : '—'})</span>
+                  </button>`;
+              }).join('')}
+              ${unqueriedArmed.map(mp => `
+                <button type="button" class="btn btn-xs btn-primary" data-query-mp="${mp.id}">Query ${esc(mp.short)} now</button>
+              `).join('')}
+            </div>
+            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500;">
+                <input type="checkbox" data-toggle-shipping-sort ${state.includeKnownShipping ? 'checked' : ''} ${state.sortOrder !== 'price_asc' && state.sortOrder !== 'price_desc' ? 'disabled' : ''}>
+                <span>Include known shipping in price sort</span>
+              </label>
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px;">
+                <span style="color:var(--text-soft); font-weight:600;">Sort:</span>
+                <select class="select" data-sort-select aria-label="Sort Listings">
+                  ${SORT_OPTIONS.map(o => `<option value="${o.id}" ${state.sortOrder === o.id ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+                </select>
+              </label>
+            </div>
+          </div>`;
+      }
+
+      function renderListingCardHtml(l) {
+        const mp = getMpMeta(l.marketplace);
+        const ship = formatShipping(l);
+        const saved = isWatchlisted(l);
+        const key = listingKey(l);
+        const isNew = Boolean(l.isNew);
+        return `
+          <article class="listing-card">
+            <div class="thumb-wrap">
+              ${renderThumbHtml(l, 'Thumbnail expired')}
+              <div class="card-top-overlay">
+                <span class="badge ${mp.badgeClass}">${esc(mp.short)}</span>
+                <div style="display:flex; gap:5px; align-items:center;">
+                  ${isNew ? `<span class="new-badge">New</span>` : ''}
+                  <button type="button" class="watch-toggle" data-watch-toggle="${esc(key)}" aria-pressed="${saved}" aria-label="${saved ? 'Remove from Watchlist' : 'Add to Watchlist'}">
+                    ${saved ? '♥ Saved' : '♡ Watchlist'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">${esc(l.title)}</h3>
+              <div class="card-price-row">
+                <span class="price-main tabular">${formatPrice(l.price)}</span>
+                <span class="${ship.cls} tabular">${esc(ship.text)}</span>
+              </div>
+              ${l.listingFormat === 'AUCTION' ? `
+                <div class="auction-meta tabular">
+                  Auction · ${l.bidCount} bids${l.buyNowPrice ? ` · Buy It Now ${formatPrice(l.buyNowPrice)}` : ''}
+                </div>
+              ` : ''}
+              <div class="card-meta">
+                <span>${esc(l.conditionLabel)}</span>
+                <span>·</span>
+                <span>${esc(l.locationLabel)}</span>
+              </div>
+              <div class="card-actions">
+                <span style="color:var(--text-soft); font-size:11.5px;">Rank #${l.nativeRank}</span>
+                <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" style="font-weight:600;">Open Listing ↗</a>
+              </div>
+            </div>
+          </article>`;
+      }
+
+      function renderTriageRowHtml(l) {
+        const mp = getMpMeta(l.marketplace);
+        const ship = formatShipping(l);
+        const saved = isWatchlisted(l);
+        const key = listingKey(l);
+        const isNew = Boolean(l.isNew);
+        return `
+          <article class="triage-row">
+            <div class="thumb-wrap">
+              ${renderThumbHtml(l, 'Expired')}
+            </div>
+            <div class="triage-mid">
+              <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
+                <span class="badge ${mp.badgeClass}">${esc(mp.short)}</span>
+                ${isNew ? `<span class="new-badge">New</span>` : ''}
+                ${l.listingFormat === 'AUCTION' ? `<span class="auction-meta tabular">Auction · ${l.bidCount} bids${l.buyNowPrice ? ` · BIN ${formatPrice(l.buyNowPrice)}` : ''}</span>` : ''}
+              </div>
+              <h3 class="triage-title">${esc(l.title)}</h3>
+              <div style="font-size:12px; color:var(--text-soft); display:flex; flex-wrap:wrap; gap:8px;">
+                <span>${esc(l.conditionLabel)}</span>
+                <span>·</span>
+                <span>${esc(l.locationLabel)}</span>
+                <span>·</span>
+                <span>Native rank #${l.nativeRank}</span>
+              </div>
+            </div>
+            <div class="triage-right">
+              <div style="display:flex; align-items:baseline; gap:6px;">
+                <span class="price-main tabular">${formatPrice(l.price)}</span>
+                <span class="${ship.cls} tabular">${esc(ship.text)}</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <button type="button" class="watch-toggle" data-watch-toggle="${esc(key)}" aria-pressed="${saved}">
+                  ${saved ? '♥ Saved' : '♡ Save'}
+                </button>
+                <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-xs">Open ↗</a>
+              </div>
+            </div>
+          </article>`;
+      }
+
+      function renderLoadMoreHtml(listingsCount) {
+        const remaining = state.extraPool.length;
+        return `
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:12px 0;">
+            <span style="font-size:12px; color:var(--text-soft);">Showing ${listingsCount} consolidated Listings${state.includeKnownShipping && (state.sortOrder === 'price_asc' || state.sortOrder === 'price_desc') ? ' · Sorting includes known shipping (+ shipping unknown uses base price)' : ''}</span>
+            <button type="button" class="btn" data-action="load-more" ${remaining === 0 ? 'disabled' : ''}>
+              ${remaining > 0 ? `Load more Listings (${remaining} remaining in batch)` : 'All mock batch Listings loaded'}
+            </button>
+          </div>`;
+      }
+
+      // --- Watchlist & Settings Views ---
+      function renderWatchlistViewHtml({ compact = false } = {}) {
+        const entries = getFilteredWatchlist();
+        return `
+          <div class="${compact ? '' : 'panel-box'}">
+            <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px;">
+              <div>
+                <h2 style="margin:0; font-size:${compact ? '15px' : '18px'};">Watchlist (${state.watchlistEntries.length})</h2>
+                ${!compact ? `<p style="margin:2px 0 0; font-size:12.5px; color:var(--text-soft);">Frozen PII-free Watchlist Entries with opportunistic local thumbnail caching. Instant removal with Undo.</p>` : ''}
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                <select class="select" data-wc-filter-mp aria-label="Filter Watchlist by Marketplace">
+                  <option value="all" ${state.watchlistFilterMp === 'all' ? 'selected' : ''}>All Marketplaces</option>
+                  ${MARKETPLACES.map(m => `<option value="${m.id}" ${state.watchlistFilterMp === m.id ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}
+                </select>
+                <select class="select" data-wc-sort aria-label="Sort Watchlist">
+                  <option value="saved_desc" ${state.watchlistSort === 'saved_desc' ? 'selected' : ''}>Newest saved</option>
+                  <option value="price_asc" ${state.watchlistSort === 'price_asc' ? 'selected' : ''}>Price: Low → High</option>
+                  <option value="price_desc" ${state.watchlistSort === 'price_desc' ? 'selected' : ''}>Price: High → Low</option>
+                </select>
+              </div>
+            </div>
+
+            ${entries.length === 0 ? `
+              <div style="padding:24px; text-align:center; color:var(--text-soft); border:1px dashed var(--border-strong); border-radius:var(--radius-md);">
+                No Watchlist Entries match the current filter.
+              </div>
+            ` : `
+              <div class="${compact ? 'check-list' : 'watchlist-grid'}">
+                ${entries.map(w => {
+                  const mp = getMpMeta(w.marketplace);
+                  const cacheNote = w.cachedThumbnailPath ? 'Cached locally' : (w.brokenThumb ? 'Remote URL expired' : 'Remote URL');
+                  return `
+                    <article style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; display:flex; gap:10px; align-items:flex-start;">
+                      <div class="thumb-wrap" style="width:${compact ? '60px' : '84px'}; height:${compact ? '60px' : '84px'}; border-radius:var(--radius-sm);">
+                        ${renderThumbHtml(w, 'Cached fallback')}
+                      </div>
+                      <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                          <span class="badge ${mp.badgeClass}">${esc(mp.short)}</span>
+                          <span style="font-size:11px; color:var(--text-soft);">${esc(cacheNote)}</span>
+                        </div>
+                        <div style="font-weight:600; font-size:13px; line-height:1.3;">${esc(w.title)}</div>
+                        <div style="display:flex; align-items:baseline; gap:6px; font-size:13px;">
+                          <strong class="tabular">${formatPrice(w.price)}</strong>
+                          <span style="font-size:11.5px; color:var(--text-soft);">${w.shippingPrice === 0 ? 'Free shipping' : w.shippingPrice !== null ? `+$${w.shippingPrice.toFixed(2)}` : '+ shipping'}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-top:2px;">
+                          <a href="${esc(w.url)}" target="_blank" rel="noopener noreferrer" style="font-size:12px; font-weight:600;">Open Listing ↗</a>
+                          <button type="button" class="btn btn-xs" style="color:var(--danger);" data-wc-remove="${esc(w.marketplace)}|${esc(w.marketplaceListingId)}">Remove</button>
+                        </div>
+                      </div>
+                    </article>`;
+                }).join('')}
+              </div>
+            `}
+          </div>`;
+      }
+
+      function renderSettingsViewHtml() {
+        const s = state.settings;
+        return `
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div class="panel-box">
+              <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
+                <div>
+                  <h2 style="margin:0; font-size:18px;">Settings & Local Runtime</h2>
+                  <p style="margin:2px 0 0; font-size:12.5px; color:var(--text-soft);">Localhost server bound to <code>127.0.0.1</code> · Data directory: <code>${esc(s.dataDir)}</code></p>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge diag-exact">${esc(s.serverStatus)}</span>
+                  <button type="button" class="btn btn-sm btn-danger" data-action="stop-server">Stop server</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-grid">
+              <section class="panel-box">
+                <h3 style="margin:0; font-size:15px;">eBay Production Browse API</h3>
+                <label style="display:flex; flex-direction:column; gap:4px; font-size:12.5px; font-weight:600;">
+                  <span>Client ID</span>
+                  <input type="text" class="input" value="${esc(s.ebayClientId)}" data-setting-input="ebayClientId">
+                </label>
+                <div style="display:flex; flex-direction:column; gap:6px; font-size:12.5px;">
+                  <span style="font-weight:600;">Client Secret (stored in <code>secrets.json</code> — never returned by GET)</span>
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <code style="background:var(--surface-subtle); padding:5px 8px; border-radius:4px;">${s.hasEbaySecret ? '••••••••••••a9f2 (Configured)' : 'Not configured'}</code>
+                    <button type="button" class="btn btn-sm" data-action="toggle-replace-secret">${s.showReplaceSecret ? 'Cancel replace' : 'Replace secret'}</button>
+                  </div>
+                  ${s.showReplaceSecret ? `
+                    <div style="display:flex; gap:6px;">
+                      <input type="password" class="input" style="flex:1;" placeholder="Enter new eBay client_secret" value="${esc(s.ebaySecretInput)}" data-setting-input="ebaySecretInput">
+                      <button type="button" class="btn btn-sm btn-primary" data-action="save-ebay-secret">Save</button>
+                    </div>
+                  ` : ''}
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                  <span style="font-size:12px; color:var(--success);">${esc(s.ebayVerifyNote)}</span>
+                  <button type="button" class="btn btn-sm" data-action="verify-ebay">Verify credentials</button>
+                </div>
+              </section>
+
+              <section class="panel-box">
+                <h3 style="margin:0; font-size:15px;">Browser & Location Defaults</h3>
+                <label style="display:flex; flex-direction:column; gap:4px; font-size:12.5px; font-weight:600;">
+                  <span>Installed Windows Browser Channel</span>
+                  <select class="select" data-setting-select="browserChannel">
+                    <option value="chrome" ${s.browserChannel === 'chrome' ? 'selected' : ''}>Google Chrome (channel: 'chrome')</option>
+                    <option value="msedge" ${s.browserChannel === 'msedge' ? 'selected' : ''}>Microsoft Edge (channel: 'msedge')</option>
+                  </select>
+                </label>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                  <label style="display:flex; flex-direction:column; gap:4px; font-size:12.5px; font-weight:600;">
+                    <span>Home ZIP Code</span>
+                    <input type="text" class="input tabular" value="${esc(s.homeZip)}" data-setting-input="homeZip">
+                  </label>
+                  <label style="display:flex; flex-direction:column; gap:4px; font-size:12.5px; font-weight:600;">
+                    <span>Default Pickup Radius</span>
+                    <select class="select tabular" data-setting-select="defaultRadiusMiles">
+                      ${[10, 25, 50, 100].map(r => `<option value="${r}" ${Number(s.defaultRadiusMiles) === r ? 'selected' : ''}>${r} miles</option>`).join('')}
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <section class="panel-box">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                  <h3 style="margin:0; font-size:15px;">Customizable Facebook City Hubs</h3>
+                  <button type="button" class="btn btn-xs" data-action="reset-hubs">Reset 8-city preset</button>
+                </div>
+                <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600;">
+                  <span>Hub Search Radius (miles):</span>
+                  <input type="number" min="10" max="500" class="input tabular" style="width:90px;" value="${s.facebookRadiusMiles}" data-setting-input="facebookRadiusMiles">
+                </label>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  ${s.customHubs.map(h => `
+                    <span class="badge mp-facebook" style="padding:4px 8px;">${esc(h.label)} (${esc(h.slug)})</span>
+                  `).join('')}
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <input type="text" class="input" style="flex:1;" placeholder="Add city slug (e.g. boston)" value="${esc(s.newHubInput)}" data-setting-input="newHubInput">
+                  <button type="button" class="btn btn-sm" data-action="add-hub">Add hub</button>
+                </div>
+              </section>
+
+              <section class="panel-box">
+                <h3 style="margin:0; font-size:15px;">Dedicated Browser Profiles</h3>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  ${Object.entries(s.sessions).map(([mpId, info]) => `
+                    <div style="border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 10px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                      <div>
+                        <div style="font-weight:600; font-size:13px;">${esc(info.label)}</div>
+                        <div style="font-size:11.5px; color:var(--text-soft);">${esc(info.mode)} · <strong>${esc(info.status)}</strong></div>
+                      </div>
+                      <div style="display:flex; gap:6px;">
+                        <button type="button" class="btn btn-xs" data-open-session="${mpId}">Open browser session</button>
+                        <button type="button" class="btn btn-xs" style="color:var(--danger);" data-reset-profile="${mpId}">Reset profile</button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </section>
+            </div>
+          </div>`;
+      }
+
+      // --- Three Structurally Distinct Variants ---
+      function renderVariantA() {
+        const listings = getFilteredAndSortedListings();
+        return `
+          <div class="shell-a">
+            <aside class="shell-a-sidebar" aria-label="Search tools and Unified Filters">
+              <div class="brand-title"><span class="brand-dot" aria-hidden="true"></span> Unified Marketplace Search</div>
+              ${renderNavHtml()}
+              <hr style="border:0; border-top:1px solid var(--border); margin:0;">
+              ${renderSavedSearchesHtml()}
+              <hr style="border:0; border-top:1px solid var(--border); margin:0;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:700; font-size:13px;">Unified Filters</span>
+                <button type="button" class="btn btn-xs btn-ghost" data-action="clear-filters">Reset</button>
+              </div>
+              ${renderUnifiedFiltersHtml({ compact: false, sectionPrefix: 'a' })}
+            </aside>
+
+            <main class="shell-a-main">
+              ${state.view === 'watchlist' ? renderWatchlistViewHtml() : state.view === 'settings' ? renderSettingsViewHtml() : `
+                <form class="panel-box" style="padding:12px 14px; gap:10px;" data-search-form>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <input type="search" class="input" style="flex:1; min-width:220px;" value="${esc(state.keywords)}" data-keywords-input placeholder="Search Listings across Marketplaces (required)..." aria-label="Search keywords">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                  </div>
+                  ${state.keywordError ? `<div class="validation-msg">${esc(state.keywordError)}</div>` : ''}
+                  <div class="mp-switch-group">
+                    <span class="mp-switch-label">Pre-run Marketplaces (next search):</span>
+                    ${MARKETPLACES.map(mp => `
+                      <button type="button" class="mp-arm-btn" data-arm-mp="${mp.id}" aria-pressed="${state.armedMarketplaces[mp.id]}">
+                        ${state.armedMarketplaces[mp.id] ? '✓' : '+'} ${esc(mp.label)}
+                      </button>
+                    `).join('')}
+                  </div>
+                </form>
+
+                <section aria-label="Per-Marketplace execution and filter translation status" class="status-strip">
+                  ${MARKETPLACES.map(mp => renderStatusCardHtml(mp)).join('')}
+                </section>
+
+                ${renderPostRunToolbarHtml()}
+
+                ${listings.length === 0 ? `
+                  <div class="panel-box" style="text-align:center; padding:32px; color:var(--text-soft);">
+                    No Listings match your current Unified Filters and visible Marketplaces.
+                  </div>
+                ` : `
+                  <section aria-label="Consolidated Listing grid" class="grid-a">
+                    ${listings.map(renderListingCardHtml).join('')}
+                  </section>
+                `}
+                ${renderLoadMoreHtml(listings.length)}
+              `}
+            </main>
+          </div>`;
+      }
+
+      function renderVariantB() {
+        const listings = getFilteredAndSortedListings();
+        const diagMap = computeTranslationDiagnostics();
+        const hasAlert = MARKETPLACES.some(m => ['challenged', 'checkpoint', 'broadened', 'skipped_unsupported', 'streaming'].includes(diagMap[m.id].code));
+        const showDiagnostics = state.bDiagnosticsOpen || hasAlert;
+        const activeSs = state.savedSearches.find(s => s.id === state.activeSavedSearchId);
+
+        return `
+          <header class="shell-b-header">
+            <div class="shell-b-row">
+              <div class="brand-title"><span class="brand-dot" aria-hidden="true"></span> UMS</div>
+              <form style="display:flex; flex:1; min-width:260px; gap:6px;" data-search-form>
+                <input type="search" class="input" style="flex:1;" value="${esc(state.keywords)}" data-keywords-input placeholder="Required keywords..." aria-label="Search keywords">
+                <button type="submit" class="btn btn-primary">Search</button>
+              </form>
+              <div class="mp-switch-group" aria-label="Pre-run Marketplace toggles">
+                <span class="mp-switch-label">Arm:</span>
+                ${MARKETPLACES.map(mp => `
+                  <button type="button" class="mp-arm-btn" data-arm-mp="${mp.id}" aria-pressed="${state.armedMarketplaces[mp.id]}">${esc(mp.short)}</button>
+                `).join('')}
+              </div>
+              <button type="button" class="btn btn-sm" popovertarget="b-saved-pop" style="anchor-name: --b-saved-btn;">
+                Saved Searches (${state.savedSearches.length})${activeSs && state.savedSearchDirty ? ' •' : ''}
+              </button>
+              ${renderNavHtml()}
+            </div>
+
+            ${state.view === 'search' ? `
+              <div class="shell-b-row" style="justify-content:space-between;">
+                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
+                  <span class="mp-switch-label">Unified Filters:</span>
+                  <button type="button" class="btn btn-sm" popovertarget="b-price-pop" style="anchor-name: --b-price-btn;">
+                    Price${state.priceMin || state.priceMax ? ` ($${state.priceMin || '0'}–$${state.priceMax || '∞'})` : ''}
+                  </button>
+                  <button type="button" class="btn btn-sm" popovertarget="b-cond-pop" style="anchor-name: --b-cond-btn;">
+                    Condition${state.conditions.length ? ` (${state.conditions.length})` : ''}
+                  </button>
+                  <button type="button" class="btn btn-sm" popovertarget="b-fulfill-pop" style="anchor-name: --b-fulfill-btn;">
+                    Fulfillment: ${state.fulfillment === 'any' ? 'Any' : state.fulfillment === 'shipping' ? 'Shipping' : `Local (${state.pickupZip})`}
+                  </button>
+                  <button type="button" class="btn btn-sm" popovertarget="b-hubs-pop" style="anchor-name: --b-hubs-btn;">
+                    FB City Hubs (${state.selectedHubs.length})
+                  </button>
+                  <button type="button" class="btn btn-xs btn-ghost" data-action="clear-filters">Clear</button>
+                </div>
+
+                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                  <button type="button" class="btn btn-xs" data-action="toggle-b-diag">
+                    ${showDiagnostics ? 'Hide Marketplace Status' : 'Marketplace Status'}
+                  </button>
+                </div>
+              </div>
+            ` : ''}
+          </header>
+
+          <!-- Variant B Anchored Popovers (modern-web-guidance: viewport-aware-dropdowns) -->
+          <div id="b-saved-pop" popover="auto" class="anchored-overlay" style="position-anchor: --b-saved-btn; min-width: 320px;">
+            ${renderSavedSearchesHtml()}
+          </div>
+          <div id="b-price-pop" popover="auto" class="anchored-overlay" style="position-anchor: --b-price-btn;">
+            <div class="filter-section">
+              <span class="filter-label">Price (USD base price)</span>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <input type="number" min="0" class="input tabular" placeholder="Min $" value="${esc(state.priceMin)}" data-filter-input="priceMin" aria-label="Minimum price">
+                <input type="number" min="0" class="input tabular" placeholder="Max $" value="${esc(state.priceMax)}" data-filter-input="priceMax" aria-label="Maximum price">
+              </div>
+            </div>
+          </div>
+          <div id="b-cond-pop" popover="auto" class="anchored-overlay" style="position-anchor: --b-cond-btn;">
+            <div class="filter-section">
+              <span class="filter-label">Condition (5-tier)</span>
+              <div class="check-list">
+                ${CONDITION_TIERS.map(c => `
+                  <label class="check-row"><input type="checkbox" data-cond-check="${c.id}" ${state.conditions.includes(c.id) ? 'checked' : ''}><span>${esc(c.label)}</span></label>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+          <div id="b-fulfill-pop" popover="auto" class="anchored-overlay" style="position-anchor: --b-fulfill-btn;">
+            <div class="filter-section">
+              <span class="filter-label">Fulfillment</span>
+              <div class="check-list">
+                <label class="check-row"><input type="radio" name="b-fulfill" value="any" data-fulfill-radio="any" ${state.fulfillment === 'any' ? 'checked' : ''}><span>Any</span></label>
+                <label class="check-row"><input type="radio" name="b-fulfill" value="shipping" data-fulfill-radio="shipping" ${state.fulfillment === 'shipping' ? 'checked' : ''}><span>Shipping only</span></label>
+                <label class="check-row"><input type="radio" name="b-fulfill" value="local_pickup" data-fulfill-radio="local_pickup" ${state.fulfillment === 'local_pickup' ? 'checked' : ''}><span>Local pickup only</span></label>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;">
+                <input type="text" class="input tabular" value="${esc(state.pickupZip)}" data-filter-input="pickupZip" placeholder="ZIP" aria-label="Pickup ZIP code">
+                <select class="select tabular" data-filter-select="pickupRadiusMiles" aria-label="Pickup radius">
+                  ${[10, 25, 50, 100].map(r => `<option value="${r}" ${Number(state.pickupRadiusMiles) === r ? 'selected' : ''}>${r} mi</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="b-hubs-pop" popover="auto" class="anchored-overlay" style="position-anchor: --b-hubs-btn;">
+            <div class="filter-section">
+              <span class="filter-label">Facebook 500-mi City Hubs</span>
+              <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                ${state.settings.customHubs.map(h => `
+                  <button type="button" class="toggle-pill" data-hub-toggle="${esc(h.slug)}" aria-pressed="${state.selectedHubs.includes(h.slug)}">${esc(h.label.split(',')[0])}</button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <main class="shell-b-main">
+            ${state.keywordError ? `<div class="validation-msg">${esc(state.keywordError)}</div>` : ''}
+            ${state.view === 'watchlist' ? renderWatchlistViewHtml() : state.view === 'settings' ? renderSettingsViewHtml() : `
+              ${showDiagnostics ? `
+                <section aria-label="Marketplace execution status" class="status-strip">
+                  ${MARKETPLACES.map(mp => renderStatusCardHtml(mp)).join('')}
+                </section>
+              ` : ''}
+              ${renderPostRunToolbarHtml()}
+              ${listings.length === 0 ? `
+                <div class="panel-box" style="text-align:center; padding:32px; color:var(--text-soft);">
+                  No Listings match your current Unified Filters and visible Marketplaces.
+                </div>
+              ` : `
+                <section aria-label="Full-width Listing grid" class="grid-b">
+                  ${listings.map(renderListingCardHtml).join('')}
+                </section>
+              `}
+              ${renderLoadMoreHtml(listings.length)}
+            `}
+          </main>`;
+      }
+
+      function renderVariantC() {
+        const listings = getFilteredAndSortedListings();
+        const orderedSaved = getOrderedSavedSearches();
+        const activeSs = state.savedSearches.find(s => s.id === state.activeSavedSearchId);
+
+        return `
+          <header class="shell-c-topbar">
+            <div class="brand-title" style="color:#ffffff;"><span class="brand-dot" aria-hidden="true"></span> UMS Triage</div>
+            <form style="display:flex; flex:1; min-width:240px; gap:6px;" data-search-form>
+              <input type="search" class="input" style="flex:1;" value="${esc(state.keywords)}" data-keywords-input placeholder="Keywords..." aria-label="Search keywords">
+              <button type="submit" class="btn btn-primary">Search</button>
+            </form>
+            <select class="select" data-c-saved-select aria-label="Quick Saved Search selector">
+              <option value="">Load Saved Search…</option>
+              ${orderedSaved.map(ss => `<option value="${ss.id}" ${ss.id === state.activeSavedSearchId ? 'selected' : ''}>${esc(ss.name)}</option>`).join('')}
+            </select>
+            ${activeSs && state.savedSearchDirty ? `
+              <button type="button" class="btn btn-sm btn-primary" data-action="update-saved">Update</button>
+              <button type="button" class="btn btn-sm btn-dark" data-action="save-new">Save as New</button>
+            ` : `
+              <button type="button" class="btn btn-sm btn-dark" data-action="save-new">+ Save Search</button>
+            `}
+            <button type="button" class="btn btn-sm btn-dark" data-action="toggle-c-filters">
+              ${state.cFilterDrawerOpen ? 'Hide Unified Filters' : 'Unified Filters'}
+            </button>
+            <button type="button" class="btn btn-sm btn-dark" data-nav="${state.view === 'settings' ? 'search' : 'settings'}">
+              ${state.view === 'settings' ? '← Back to Triage' : 'Settings'}
+            </button>
+          </header>
+
+          ${state.keywordError ? `<div class="validation-msg" style="padding:8px 18px 0;">${esc(state.keywordError)}</div>` : ''}
+
+          ${state.view === 'settings' ? `
+            <main style="max-width:1180px; margin:16px auto; padding:0 18px;">
+              ${renderSettingsViewHtml()}
+            </main>
+          ` : `
+            ${state.cFilterDrawerOpen ? `
+              <section aria-label="Unified Filter strip" style="background:var(--surface); border-bottom:1px solid var(--border); padding:12px 18px;">
+                <div style="max-width:1520px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
+                  ${renderUnifiedFiltersHtml({ compact: true, sectionPrefix: 'c' })}
+                </div>
+              </section>
+            ` : ''}
+
+            <div class="shell-c-body">
+              <main style="display:flex; flex-direction:column; gap:10px; min-width:0;">
+                <div class="toolbar-bar" style="gap:8px;">
+                  <div class="mp-switch-group">
+                    <span class="mp-switch-label">Arm:</span>
+                    ${MARKETPLACES.map(mp => `
+                      <button type="button" class="mp-arm-btn" data-arm-mp="${mp.id}" aria-pressed="${state.armedMarketplaces[mp.id]}">${esc(mp.short)}</button>
+                    `).join('')}
+                  </div>
+                </div>
+                ${renderPostRunToolbarHtml()}
+                ${listings.length === 0 ? `
+                  <div class="panel-box" style="text-align:center; padding:28px; color:var(--text-soft);">
+                    No Listings match your current Unified Filters and visible Marketplaces.
+                  </div>
+                ` : `
+                  <section aria-label="High-density Listing triage rows" class="triage-list">
+                    ${listings.map(renderTriageRowHtml).join('')}
+                  </section>
+                `}
+                ${renderLoadMoreHtml(listings.length)}
+              </main>
+
+              <aside class="shell-c-dock" aria-label="Live Sweep Monitor and Docked Watchlist">
+                <section class="dock-panel">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2 style="margin:0; font-size:14px;">Live Sweep & Marketplace Health</h2>
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:6px;">
+                    ${MARKETPLACES.map(mp => renderStatusCardHtml(mp)).join('')}
+                  </div>
+                </section>
+
+                <section class="dock-panel">
+                  <div class="dock-tablist" role="tablist" aria-label="Dock panels">
+                    <button type="button" role="tab" id="c-tab-watchlist" class="dock-tab" aria-selected="${state.dockTab === 'watchlist'}" tabindex="${state.dockTab === 'watchlist' ? '0' : '-1'}" data-dock-tab="watchlist">
+                      Docked Watchlist (${state.watchlistEntries.length})
+                    </button>
+                    <button type="button" role="tab" id="c-tab-saved" class="dock-tab" aria-selected="${state.dockTab === 'saved'}" tabindex="${state.dockTab === 'saved' ? '0' : '-1'}" data-dock-tab="saved">
+                      Saved Searches (${state.savedSearches.length})
+                    </button>
+                  </div>
+                  <div role="tabpanel" aria-labelledby="c-tab-watchlist" ${state.dockTab === 'watchlist' ? '' : 'hidden="until-found"'}>
+                    <div class="dock-tabpanel-inner">
+                      ${renderWatchlistViewHtml({ compact: true })}
+                    </div>
+                  </div>
+                  <div role="tabpanel" aria-labelledby="c-tab-saved" ${state.dockTab === 'saved' ? '' : 'hidden="until-found"'}>
+                    <div class="dock-tabpanel-inner">
+                      ${renderSavedSearchesHtml()}
+                    </div>
+                  </div>
+                </section>
+              </aside>
+            </div>
+          `}`;
+      }
+
+      // --- Render & Focus-Preservation ---
+      function render() {
+        const root = document.getElementById('app-root');
+        if (!root) return;
+
+        // Preserve focus across interactive re-renders
+        const activeEl = document.activeElement;
+        let focusMarker = null;
+        if (activeEl && root.contains(activeEl)) {
+          if (activeEl.hasAttribute('data-keywords-input')) focusMarker = { sel: '[data-keywords-input]', s: activeEl.selectionStart, e: activeEl.selectionEnd };
+          else if (activeEl.hasAttribute('data-filter-input')) focusMarker = { sel: `[data-filter-input="${activeEl.getAttribute('data-filter-input')}"]`, s: activeEl.selectionStart, e: activeEl.selectionEnd };
+          else if (activeEl.hasAttribute('data-setting-input')) focusMarker = { sel: `[data-setting-input="${activeEl.getAttribute('data-setting-input')}"]`, s: activeEl.selectionStart, e: activeEl.selectionEnd };
+        }
+
+        // Preserve any open Variant B popover id so checkbox clicks don't collapse it
+        let openPopoverId = null;
+        try {
+          openPopoverId = [...root.querySelectorAll('[popover]:popover-open')].map(el => el.id)[0] || null;
+        } catch {
+          openPopoverId = null;
+        }
+
+        if (state.variant === 'B') root.innerHTML = renderVariantB();
+        else if (state.variant === 'C') root.innerHTML = renderVariantC();
+        else root.innerHTML = renderVariantA();
+
+        if (openPopoverId) {
+          const pop = document.getElementById(openPopoverId);
+          if (pop && typeof pop.showPopover === 'function') {
+            try { pop.showPopover(); } catch { /* ignore */ }
+          }
+        }
+
+        if (focusMarker) {
+          const target = root.querySelector(focusMarker.sel);
+          if (target) {
+            target.focus();
+            if (typeof focusMarker.s === 'number' && typeof target.setSelectionRange === 'function') {
+              try { target.setSelectionRange(focusMarker.s, focusMarker.e); } catch { /* number input */ }
+            }
+          }
+        }
+
+        updateProtoBarUi();
+        updateScrollPill();
+        wireStatusTooltips();
+      }
+
+      function updateProtoBarUi() {
+        const meta = VARIANT_META[state.variant];
+        document.getElementById('proto-label').textContent = `${meta.id} (${meta.name})`;
+        document.getElementById('proto-scenario').value = state.scenario;
+      }
+
+      function updateScrollPill() {
+        const pill = document.getElementById('scroll-merge-pill');
+        const txt = document.getElementById('scroll-merge-text');
+        const indicator = document.getElementById('proto-scroll-state');
+        const scrolled = window.scrollY > 450;
+        if (scrolled) {
+          state.bufferLatched = true;
+        }
+        if (indicator) {
+          if (!state.bufferLatched) {
+            indicator.textContent = 'Top: live merge';
+          } else if (scrolled) {
+            indicator.textContent = 'Scrolled (>450px): buffer latched';
+          } else {
+            indicator.textContent = 'Top (buffer latched until pill clicked)';
+          }
+        }
+        if (!pill || !txt) return;
+        const count = state.pendingBuffer.length;
+        if (count > 0 && state.view === 'search') {
+          pill.hidden = false;
+          txt.textContent = `+${count} new ${count === 1 ? 'Listing' : 'Listings'} — Click to merge`;
+        } else {
+          pill.hidden = true;
+        }
+      }
+
+      // --- Variant Switcher & URL Sync ---
+      function setVariant(nextId) {
+        if (!VARIANT_META[nextId]) return;
+        state.variant = nextId;
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('variant', nextId);
+          window.history.replaceState({}, '', url);
+        } catch {
+          // Safe fallback on restricted file:// schemes
+        }
+        render();
+      }
+
+      function cycleVariant(delta) {
+        const order = ['A', 'B', 'C'];
+        const idx = order.indexOf(state.variant);
+        const next = order[(idx + delta + order.length) % order.length];
+        setVariant(next);
+      }
+
+      function readInitialVariantFromUrl() {
+        try {
+          const param = new URLSearchParams(window.location.search).get('variant');
+          const upper = param ? param.toUpperCase() : 'A';
+          return VARIANT_META[upper] ? upper : 'A';
+        } catch {
+          return 'A';
+        }
+      }
+
+      // --- Delegated Event Handling ---
+      function attachEvents() {
+        const root = document.getElementById('app-root');
+
+        root.addEventListener('submit', (e) => {
+          if (e.target.matches('[data-search-form]')) {
+            e.preventDefault();
+            runLiveSearch();
+          }
+        });
+
+        root.addEventListener('input', (e) => {
+          const t = e.target;
+          if (t.matches('[data-keywords-input]')) {
+            state.keywords = t.value;
+            if (state.keywordError && t.value.trim()) state.keywordError = '';
+            markDirtyIfActiveSaved();
+          } else if (t.matches('[data-filter-input]')) {
+            const field = t.getAttribute('data-filter-input');
+            state[field] = t.value;
+            markDirtyIfActiveSaved();
+            render();
+          } else if (t.matches('[data-setting-input]')) {
+            const field = t.getAttribute('data-setting-input');
+            state.settings[field] = field === 'facebookRadiusMiles' ? Number(t.value || 500) : t.value;
+          }
+        });
+
+        root.addEventListener('change', (e) => {
+          const t = e.target;
+          if (t.matches('[data-cond-check]')) {
+            const id = t.getAttribute('data-cond-check');
+            if (t.checked && !state.conditions.includes(id)) state.conditions.push(id);
+            else if (!t.checked) state.conditions = state.conditions.filter(c => c !== id);
+            markDirtyIfActiveSaved();
+            render();
+          } else if (t.matches('[data-fulfill-radio]')) {
+            state.fulfillment = t.value;
+            markDirtyIfActiveSaved();
+            render();
+          } else if (t.matches('[data-filter-select]')) {
+            const field = t.getAttribute('data-filter-select');
+            state[field] = Number(t.value);
+            markDirtyIfActiveSaved();
+            render();
+          } else if (t.matches('[data-sort-select]')) {
+            state.sortOrder = t.value;
+            markDirtyIfActiveSaved();
+            render();
+          } else if (t.matches('[data-toggle-shipping-sort]')) {
+            state.includeKnownShipping = t.checked;
+            render();
+          } else if (t.matches('[data-wc-filter-mp]')) {
+            state.watchlistFilterMp = t.value;
+            render();
+          } else if (t.matches('[data-wc-sort]')) {
+            state.watchlistSort = t.value;
+            render();
+          } else if (t.matches('[data-c-saved-select]')) {
+            if (t.value) loadAndRunSavedSearch(t.value);
+          } else if (t.matches('[data-setting-select]')) {
+            const field = t.getAttribute('data-setting-select');
+            state.settings[field] = field === 'defaultRadiusMiles' ? Number(t.value) : t.value;
+            showToast(`Updated setting: ${field}.`);
+          }
+        });
+
+        root.addEventListener('click', (e) => {
+          const btn = e.target.closest('button');
+          if (!btn) return;
+
+          if (btn.hasAttribute('data-nav')) {
+            state.view = btn.getAttribute('data-nav');
+            render();
+          } else if (btn.hasAttribute('data-arm-mp')) {
+            const mpId = btn.getAttribute('data-arm-mp');
+            state.armedMarketplaces[mpId] = !state.armedMarketplaces[mpId];
+            markDirtyIfActiveSaved();
+            render();
+          } else if (btn.hasAttribute('data-vis-mp')) {
+            const mpId = btn.getAttribute('data-vis-mp');
+            state.visibleMarketplaces[mpId] = !state.visibleMarketplaces[mpId];
+            render();
+          } else if (btn.hasAttribute('data-cond-toggle')) {
+            const id = btn.getAttribute('data-cond-toggle');
+            if (state.conditions.includes(id)) state.conditions = state.conditions.filter(c => c !== id);
+            else state.conditions.push(id);
+            markDirtyIfActiveSaved();
+            render();
+          } else if (btn.hasAttribute('data-hub-toggle')) {
+            const slug = btn.getAttribute('data-hub-toggle');
+            if (state.selectedHubs.includes(slug)) {
+              if (state.selectedHubs.length > 1) state.selectedHubs = state.selectedHubs.filter(s => s !== slug);
+            } else {
+              state.selectedHubs.push(slug);
+            }
+            markDirtyIfActiveSaved();
+            render();
+          } else if (btn.hasAttribute('data-watch-toggle')) {
+            const key = btn.getAttribute('data-watch-toggle');
+            const found = state.loadedListings.find(l => listingKey(l) === key);
+            if (found) toggleWatchlist(found);
+          } else if (btn.hasAttribute('data-wc-remove')) {
+            const [mp, id] = btn.getAttribute('data-wc-remove').split('|');
+            removeWatchlistEntry(mp, id);
+          } else if (btn.hasAttribute('data-run-saved')) {
+            loadAndRunSavedSearch(btn.getAttribute('data-run-saved'));
+          } else if (btn.hasAttribute('data-rename-saved')) {
+            promptRenameSavedSearch(btn.getAttribute('data-rename-saved'));
+          } else if (btn.hasAttribute('data-delete-saved')) {
+            promptDeleteSavedSearch(btn.getAttribute('data-delete-saved'));
+          } else if (btn.hasAttribute('data-query-mp')) {
+            querySingleMarketplace(btn.getAttribute('data-query-mp'));
+          } else if (btn.hasAttribute('data-open-session')) {
+            const mpId = btn.getAttribute('data-open-session');
+            state.marketplaceStates[mpId].sessionReady = true;
+            if (state.settings.sessions[mpId]) state.settings.sessions[mpId].status = 'Foreground window opened · Ready';
+            showToast(`Opened dedicated Chrome profile for ${getMpMeta(mpId).label}. Ready to retry.`);
+            render();
+          } else if (btn.hasAttribute('data-retry-mp')) {
+            querySingleMarketplace(btn.getAttribute('data-retry-mp'));
+          } else if (btn.hasAttribute('data-reset-profile')) {
+            const mpId = btn.getAttribute('data-reset-profile');
+            openConfirmDialog({
+              title: `Reset ${getMpMeta(mpId).label} profile?`,
+              body: 'This clears cookies and local storage inside the dedicated Chrome profile directory for this Marketplace.',
+              submitLabel: 'Reset profile',
+              onConfirm: () => {
+                if (state.settings.sessions[mpId]) state.settings.sessions[mpId].status = 'Clean profile reset';
+                showToast(`Reset ${getMpMeta(mpId).label} browser profile.`);
+                render();
+              }
+            });
+          } else if (btn.hasAttribute('data-dock-tab')) {
+            state.dockTab = btn.getAttribute('data-dock-tab');
+            render();
+          } else if (btn.hasAttribute('data-action')) {
+            const act = btn.getAttribute('data-action');
+            if (act === 'clear-filters') {
+              state.priceMin = '';
+              state.priceMax = '';
+              state.conditions = [];
+              state.fulfillment = 'any';
+              state.selectedHubs = state.settings.customHubs.map(h => h.slug);
+              markDirtyIfActiveSaved();
+              render();
+            } else if (act === 'stop-fb-sweep') {
+              stopFacebookSweep();
+            } else if (act === 'load-more') {
+              loadMoreListings();
+            } else if (act === 'update-saved') {
+              updateActiveSavedSearch();
+            } else if (act === 'save-new') {
+              saveAsNewSavedSearch();
+            } else if (act === 'toggle-b-diag') {
+              state.bDiagnosticsOpen = !state.bDiagnosticsOpen;
+              render();
+            } else if (act === 'toggle-c-filters') {
+              state.cFilterDrawerOpen = !state.cFilterDrawerOpen;
+              render();
+            } else if (act === 'toggle-replace-secret') {
+              state.settings.showReplaceSecret = !state.settings.showReplaceSecret;
+              render();
+            } else if (act === 'save-ebay-secret') {
+              if (state.settings.ebaySecretInput.trim()) {
+                state.settings.hasEbaySecret = true;
+                state.settings.ebaySecretInput = '';
+                state.settings.showReplaceSecret = false;
+                showToast('Updated eBay client_secret in secrets.json.');
+                render();
+              }
+            } else if (act === 'verify-ebay') {
+              state.settings.ebayVerifyNote = 'OAuth client_credentials token verified (5,000 calls/day quota)';
+              showToast('Verified eBay Production Browse API credentials.');
+              render();
+            } else if (act === 'add-hub') {
+              const raw = state.settings.newHubInput.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (raw && !state.settings.customHubs.some(h => h.slug === raw)) {
+                const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+                state.settings.customHubs.push({ slug: raw, label });
+                state.selectedHubs.push(raw);
+                state.settings.newHubInput = '';
+                showToast(`Added Facebook City Hub "${label}".`);
+                render();
+              }
+            } else if (act === 'reset-hubs') {
+              state.settings.customHubs = [...DEFAULT_HUBS];
+              state.selectedHubs = DEFAULT_HUBS.map(h => h.slug);
+              state.settings.facebookRadiusMiles = 500;
+              showToast('Restored default 8-city 500-mile preset.');
+              render();
+            } else if (act === 'stop-server') {
+              state.settings.serverStatus = 'Stopped cleanly (close tab)';
+              showToast('Local Hono server and browser profiles shut down cleanly.');
+              render();
+            }
+          }
+        });
+
+        // Keyboard arrow navigation inside Variant C dock tablist
+        root.addEventListener('keydown', (e) => {
+          if (e.target.matches('[role="tab"]') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+            e.preventDefault();
+            state.dockTab = state.dockTab === 'watchlist' ? 'saved' : 'watchlist';
+            render();
+            const nextTab = document.getElementById(state.dockTab === 'watchlist' ? 'c-tab-watchlist' : 'c-tab-saved');
+            if (nextTab) nextTab.focus();
+          }
+        });
+
+        // Sync tab panels revealed by browser Find-in-page (`hidden="until-found"` -> `beforematch`)
+        root.addEventListener('beforematch', (e) => {
+          const panel = e.target.closest('[role="tabpanel"]');
+          if (!panel) return;
+          const labelled = panel.getAttribute('aria-labelledby');
+          if (labelled === 'c-tab-watchlist') state.dockTab = 'watchlist';
+          if (labelled === 'c-tab-saved') state.dockTab = 'saved';
+          render();
+        });
+
+        // Floating merge pill
+        document.getElementById('scroll-merge-pill').addEventListener('click', flushPendingBuffer);
+
+        // Floating bottom prototype bar controls
+        document.getElementById('proto-prev').addEventListener('click', () => cycleVariant(-1));
+        document.getElementById('proto-next').addEventListener('click', () => cycleVariant(1));
+        document.getElementById('proto-scenario').addEventListener('change', (e) => {
+          applyScenario(e.target.value);
+        });
+        document.getElementById('proto-stream-btn').addEventListener('click', () => streamNextBatch());
+
+        // Keyboard variant switching (← / →), guarded against form fields and open modal dialogs
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            document.querySelectorAll('.status-tooltip.tooltip-open').forEach(el => el.classList.remove('tooltip-open'));
+            return;
+          }
+          if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          if (document.querySelector('dialog[open]')) return;
+          const active = document.activeElement;
+          if (active && (active.matches('input, textarea, select, [contenteditable], [role="tab"]') || active.closest('[contenteditable]'))) {
+            return;
+          }
+          e.preventDefault();
+          cycleVariant(e.key === 'ArrowRight' ? 1 : -1);
+        });
+
+        window.addEventListener('scroll', updateScrollPill, { passive: true });
+      }
+
+      // --- Boot ---
+      state.variant = readInitialVariantFromUrl();
+      setupDialogs();
+      setupToastLifecycle();
+      setupHintTooltips();
+      attachEvents();
+      applyScenario('normal');
+    })();
+  </script>
+</body>
+</html>
