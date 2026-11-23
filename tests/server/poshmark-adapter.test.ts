@@ -166,13 +166,49 @@ describe('PoshmarkAdapter', () => {
         department: 'All',
         inventory_status: ['available'],
         condition: ['nwt', 'uln', 'ug', 'uf'],
-        price_amount_range: [{ min: 2500, max: 15000 }],
+        price_amount_range: [
+          {
+            min: { val: '25', currency_code: 'USD' },
+            max: { val: '150', currency_code: 'USD' },
+          },
+        ],
       },
       query: 'patagonia nano puff',
       sort_by: 'added_desc',
       count: 48,
       experience: 'all',
     });
+
+    // priceMax-only and priceMin-only translations
+    const maxOnly = adapter.translateFilters(
+      'jacket',
+      {
+        ...createDefaultUnifiedFilter(),
+        priceMin: null,
+        priceMax: 100,
+      },
+      'relevance',
+      makeContext(),
+    );
+    expect(new URL(maxOnly.nativeSearchUrl).searchParams.getAll('price[]')).toEqual(['-100']);
+    expect((maxOnly.nativeQuery as PoshmarkNativeQuery).vmRestRequest.filters.price_amount_range).toEqual([
+      { max: { val: '100', currency_code: 'USD' } },
+    ]);
+
+    const minOnly = adapter.translateFilters(
+      'jacket',
+      {
+        ...createDefaultUnifiedFilter(),
+        priceMin: 50,
+        priceMax: null,
+      },
+      'relevance',
+      makeContext(),
+    );
+    expect(new URL(minOnly.nativeSearchUrl).searchParams.getAll('price[]')).toEqual(['50-']);
+    expect((minOnly.nativeQuery as PoshmarkNativeQuery).vmRestRequest.filters.price_amount_range).toEqual([
+      { min: { val: '50', currency_code: 'USD' } },
+    ]);
 
     // Broadened translation when 'poor' is selected (maps to 'uf', deduplicated with 'fair')
     const broadened = adapter.translateFilters(
