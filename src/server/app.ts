@@ -6,10 +6,12 @@ import { streamSSE } from 'hono/streaming';
 import {
   BROWSER_MARKETPLACE_IDS,
   BrowserMarketplaceIdSchema,
+  CreateSavedSearchInputSchema,
   LoadMoreRequestSchema,
   MarketplaceIdSchema,
   SearchRequestSchema,
   UpdateEbayCredentialsInputSchema,
+  UpdateSavedSearchInputSchema,
   UpdateSettingsInputSchema,
   type BrowserMarketplaceId,
   type BrowserProfileStatus,
@@ -318,6 +320,73 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
         });
       });
     });
+  });
+
+  const nowIso = () => new Date(deps.clock ? deps.clock() : Date.now()).toISOString();
+
+  app.get('/api/saved-searches', (c) => {
+    return c.json({ savedSearches: database.savedSearches.list() });
+  });
+
+  app.post('/api/saved-searches', async (c) => {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = CreateSavedSearchInputSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid Saved Search payload', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    const savedSearch = database.savedSearches.create(parsed.data, nowIso());
+    return c.json({ savedSearch }, 201);
+  });
+
+  app.patch('/api/saved-searches/:id', async (c) => {
+    const id = c.req.param('id');
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = UpdateSavedSearchInputSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid Saved Search update payload', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    const updated = database.savedSearches.update(id, parsed.data);
+    if (!updated) {
+      return c.json({ error: 'Saved Search not found' }, 404);
+    }
+
+    return c.json({ savedSearch: updated });
+  });
+
+  app.delete('/api/saved-searches/:id', (c) => {
+    const deleted = database.savedSearches.delete(c.req.param('id'));
+    if (!deleted) {
+      return c.json({ error: 'Saved Search not found' }, 404);
+    }
+    return c.json({ deleted: true });
+  });
+
+  app.post('/api/saved-searches/:id/run', (c) => {
+    const updated = database.savedSearches.recordRun(c.req.param('id'), nowIso());
+    if (!updated) {
+      return c.json({ error: 'Saved Search not found' }, 404);
+    }
+    return c.json({ savedSearch: updated });
   });
 
   app.post('/api/browser/:marketplace/open-session', async (c) => {

@@ -408,3 +408,116 @@ dialog.ums-dialog::backdrop {
   background: var(--skip-bg);
   color: var(--skip-text);
 }
+
+.saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 368px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.saved-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saved-item-active {
+  background: var(--accent-soft);
+  border-color: #93c5fd;
+}
+
+.saved-item-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.saved-name-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.saved-name-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-name-btn:hover {
+  color: var(--accent);
+}
+
+.saved-icon-btn,
+.saved-icon-delete {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-soft);
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.saved-icon-btn:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.saved-icon-delete {
+  margin-left: auto;
+  font-size: 15px;
+}
+
+.saved-icon-delete:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.saved-meta-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.saved-dirty-banner {
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
