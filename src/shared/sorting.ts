@@ -9,6 +9,7 @@ import {
 
 export interface SortListingsOptions {
   includeKnownShipping?: boolean;
+  includeKnownShippingInPriceSort?: boolean;
 }
 
 function getEffectivePrice(listing: Listing, includeKnownShipping: boolean): number {
@@ -26,9 +27,52 @@ function getTotalPriceTieBreaker(listing: Listing): { hasKnownTotal: boolean; to
   };
 }
 
+function roundRobinInterleave(streams: readonly (readonly Listing[])[]): Listing[] {
+  const result: Listing[] = [];
+  let index = 0;
+  let added = true;
+  while (added) {
+    added = false;
+    for (const stream of streams) {
+      const next = stream[index];
+      if (next) {
+        result.push(next);
+        added = true;
+      }
+    }
+    index += 1;
+  }
+  return result;
+}
+
+function buildMarketplaceRelevanceStream(bucket: Listing[]): Listing[] {
+  const hasSubStreams = bucket.some((item) => Boolean(item.hubSlug));
+  if (!hasSubStreams) {
+    return [...bucket].sort((a, b) => a.adapterRank - b.adapterRank);
+  }
+
+  const hubBuckets = new Map<string, Listing[]>();
+  for (const item of bucket) {
+    const key = item.hubSlug ?? '';
+    let list = hubBuckets.get(key);
+    if (!list) {
+      list = [];
+      hubBuckets.set(key, list);
+    }
+    list.push(item);
+  }
+
+  for (const list of hubBuckets.values()) {
+    list.sort((a, b) => a.adapterRank - b.adapterRank);
+  }
+
+  return roundRobinInterleave(Array.from(hubBuckets.values()));
+}
+
 /**
  * Merges and sorts Listings across Marketplaces according to ADR-0004 invariants:
  * - relevance: deterministic round-robin interleaving by adapterRank across active Marketplaces
+ *   and across Facebook City Hubs (hubSlug) within Facebook's stream
  * - newest: global listedAt descending (null listedAt placed after timestamped Listings, ordered by adapterRank)
  * - price_asc / price_desc: base price (or price + known shipping when enabled), tie-broken by known total price
  */
@@ -37,7 +81,8 @@ export function sortListings(
   sortOrder: SortOrder,
   options: SortListingsOptions = {},
 ): Listing[] {
-  const includeKnownShipping = options.includeKnownShipping ?? false;
+  const includeKnownShipping =
+    options.includeKnownShippingInPriceSort ?? options.includeKnownShipping ?? false;
 
   if (sortOrder === 'relevance') {
     const buckets = new Map<MarketplaceId, Listing[]>();
@@ -50,43 +95,33 @@ export function sortListings(
         bucket.push(listing);
       }
     }
-    for (const bucket of buckets.values()) {
-      bucket.sort((a, b) => a.adapterRank - b.adapterRank);
-    }
 
-    const result: Listing[] = [];
-    let index = 0;
-    let added = true;
-    while (added) {
-      added = false;
-      for (const mp of MARKETPLACE_IDS) {
-        const bucket = buckets.get(mp);
-        const next = bucket?.[index];
-        if (next) {
-          result.push(next);
-          added = true;
-        }
-      }
-      index += 1;
-    }
-    return result;
+    const streams = MARKETPLACE_IDS.map((mp) =>
+      buildMarketplaceRelevanceStream(buckets.get(mp) ?? []),
+    );
+    return roundRobinInterleave(streams);
   }
 
   const copy = [...listings];
 
   if (sortOrder === 'newest') {
     copy.sort((a, b) => {
-      if (a.listedAt && b.listedAt) {
-        const diff = Date.parse(b.listedAt) - Date.parse(a.listedAt);
-        if (diff !== 0 && !Number.isNaN(diff)) {
-          return diff;
+      const timeA = a.listedAt ? Date.parse(a.listedAt) : Number.NaN;
+      const timeB = b.listedAt ? Date.parse(b.listedAt) : Number.NaN;
+      const validA = Number.isFinite(timeA);
+      const validB = Number.isFinite(timeB);
+      if (validA && validB) {
+        if (timeB !== timeA) {
+          return timeB - timeA;
         }
-      } else if (a.listedAt && !b.listedAt) {
-        return -1;
-      } else if (!a.listedAt && b.listedAt) {
-        return 1;
+      } else if (validA !== validB) {
+        return validA ? -1 : 1;
       }
-      return a.adapterRank - b.adapterRank;
+      const rankDiff = a.adapterRank - b.adapterRank;
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
+      return MARKETPLACE_IDS.indexOf(a.marketplace) - MARKETPLACE_IDS.indexOf(b.marketplace);
     });
     return copy;
   }
@@ -110,7 +145,11 @@ export function sortListings(
       return tieDiff;
     }
 
-    return a.adapterRank - b.adapterRank;
+    const rankDiff = a.adapterRank - b.adapterRank;
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+    return MARKETPLACE_IDS.indexOf(a.marketplace) - MARKETPLACE_IDS.indexOf(b.marketplace);
   });
 
   return copy;

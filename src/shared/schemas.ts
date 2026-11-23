@@ -117,6 +117,7 @@ export const ListingSchema = z.object({
   locationLabel: z.string().nullable(),
   listedAt: z.string().nullable(),
   adapterRank: z.number().int().nonnegative(),
+  hubSlug: z.string().nullable().optional(),
 });
 
 export type Listing = z.infer<typeof ListingSchema>;
