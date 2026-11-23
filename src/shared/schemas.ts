@@ -247,3 +247,61 @@ export const SearchRequestSchema = z.object({
 });
 
 export type SearchRequest = z.infer<typeof SearchRequestSchema>;
+
+export const LoadMoreRequestSchema = z.object({
+  marketplace: MarketplaceIdSchema.optional(),
+});
+
+export type LoadMoreRequest = z.infer<typeof LoadMoreRequestSchema>;
+
+export const SearchRunStartedEventSchema = z.object({
+  searchRunId: z.string().min(1),
+  diagnostics: z.record(MarketplaceIdSchema, TranslationDiagnosticSchema),
+  statuses: z.record(MarketplaceIdSchema, MarketplaceStatusSchema),
+});
+
+export type SearchRunStartedEvent = z.infer<typeof SearchRunStartedEventSchema>;
+
+export const MarketplaceStatusEventSchema = z.object({
+  searchRunId: z.string().min(1),
+  status: MarketplaceStatusSchema,
+});
+
+export type MarketplaceStatusEvent = z.infer<typeof MarketplaceStatusEventSchema>;
+
+export const ListingsBatchEventSchema = z.object({
+  searchRunId: z.string().min(1),
+  marketplace: MarketplaceIdSchema,
+  cityHub: z.string().optional(),
+  listings: z.array(ListingSchema),
+  hasMore: z.boolean(),
+});
+
+export type ListingsBatchEvent = z.infer<typeof ListingsBatchEventSchema>;
+
+export const RunCompleteEventSchema = z.object({
+  searchRunId: z.string().min(1),
+  statuses: z.record(MarketplaceIdSchema, MarketplaceStatusSchema),
+});
+
+export type RunCompleteEvent = z.infer<typeof RunCompleteEventSchema>;
+
+export type SearchSseEvent =
+  | { event: 'run_started'; data: SearchRunStartedEvent }
+  | { event: 'marketplace_status'; data: MarketplaceStatusEvent }
+  | { event: 'listings_batch'; data: ListingsBatchEvent }
+  | { event: 'run_complete'; data: RunCompleteEvent };
+
+export function createDefaultUnifiedFilter(settings?: Pick<AppSettings, 'facebookCityHubs' | 'facebookRadiusMiles' | 'homePostalCode' | 'defaultLocalPickupRadiusMiles'>): UnifiedFilter {
+  const hubs = settings?.facebookCityHubs ?? DEFAULT_FACEBOOK_CITY_HUBS;
+  return {
+    priceMin: null,
+    priceMax: null,
+    conditions: [],
+    fulfillment: 'any',
+    facebookLocationSlugs: hubs.filter((h) => h.enabled).map((h) => h.slug),
+    facebookRadiusMiles: settings?.facebookRadiusMiles ?? 500,
+    localPickupPostalCode: settings?.homePostalCode ?? null,
+    localPickupRadiusMiles: settings?.defaultLocalPickupRadiusMiles ?? 50,
+  };
+}

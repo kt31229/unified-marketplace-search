@@ -2,17 +2,31 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import {
   BROWSER_MARKETPLACE_IDS,
   BrowserMarketplaceIdSchema,
+  LoadMoreRequestSchema,
+  MarketplaceIdSchema,
+  SearchRequestSchema,
   UpdateEbayCredentialsInputSchema,
   UpdateSettingsInputSchema,
   type BrowserMarketplaceId,
   type BrowserProfileStatus,
+  type MarketplaceId,
   type SettingsResponse,
 } from '../shared/index.ts';
+import { createEbayAdapter } from './adapters/ebay.ts';
+import { createBrowserPlaceholderAdapter } from './adapters/placeholders.ts';
+import type {
+  ClockFn,
+  FetchLike,
+  MarketplaceAdapter,
+  SleepFn,
+} from './adapters/types.ts';
 import { openDatabase, type AppDatabase } from './db.ts';
 import { ensureBaseDirectories, getProfileDir, resolveDataDir } from './paths.ts';
+import { SearchOrchestrator } from './search-orchestrator.ts';
 import { SecretsStore, type RawEbayCredentials } from './secrets.ts';
 
 export type TeardownHook = () => Promise<void> | void;
@@ -21,6 +35,10 @@ export interface CreateAppDeps {
   dataDir?: string;
   env?: NodeJS.ProcessEnv;
   staticDir?: string;
+  fetchImpl?: FetchLike;
+  clock?: ClockFn;
+  sleep?: SleepFn;
+  adapters?: Partial<Record<MarketplaceId, MarketplaceAdapter>>;
   onShutdown?: () => Promise<void> | void;
   onOpenBrowserSession?: (marketplace: BrowserMarketplaceId, url?: string) => Promise<void> | void;
   onResetBrowserProfile?: (marketplace: BrowserMarketplaceId) => Promise<void> | void;
@@ -67,6 +85,26 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
   const teardownHooks: TeardownHook[] = [];
   let isShuttingDown = false;
 
+  const defaultEbayAdapter = createEbayAdapter({
+    fetchImpl: deps.fetchImpl,
+    clock: deps.clock,
+  });
+
+  const adapters: Record<MarketplaceId, MarketplaceAdapter> = {
+    ebay: deps.adapters?.ebay ?? defaultEbayAdapter,
+    poshmark: deps.adapters?.poshmark ?? createBrowserPlaceholderAdapter('poshmark'),
+    mercari: deps.adapters?.mercari ?? createBrowserPlaceholderAdapter('mercari'),
+    facebook: deps.adapters?.facebook ?? createBrowserPlaceholderAdapter('facebook'),
+  };
+
+  const orchestrator = new SearchOrchestrator({
+    adapters,
+    getSettings: () => database.settings.getSettings(),
+    secretsStore,
+    clock: deps.clock,
+    sleep: deps.sleep,
+  });
+
   const registerTeardown = (hook: TeardownHook) => {
     teardownHooks.push(hook);
   };
@@ -76,6 +114,7 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
       return;
     }
     isShuttingDown = true;
+    orchestrator.abortAll();
 
     for (let i = teardownHooks.length - 1; i >= 0; i--) {
       const hook = teardownHooks[i];
@@ -168,14 +207,90 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
       });
     }
 
-    return c.json(
-      {
-        valid: false,
-        origin: creds.origin,
-        error: 'Live eBay OAuth verification is implemented in Ticket #17.',
-      },
-      501,
-    );
+    const result = await defaultEbayAdapter.verifyCredentials(creds);
+    return c.json({
+      valid: result.valid,
+      origin: creds.origin,
+      ...(result.error ? { error: result.error } : {}),
+    });
+  });
+
+  app.post('/api/searches/stream', async (c) => {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = SearchRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid search request', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    return streamSSE(c, async (stream) => {
+      await orchestrator.startSearchStream(parsed.data, async (evt) => {
+        await stream.writeSSE({
+          event: evt.event,
+          data: JSON.stringify(evt.data),
+        });
+      });
+    });
+  });
+
+  app.post('/api/searches/:runId/load-more', async (c) => {
+    const runId = c.req.param('runId');
+    if (!orchestrator.hasRun(runId)) {
+      return c.json({ error: 'Search run not found' }, 404);
+    }
+
+    let marketplace: MarketplaceId | undefined;
+    try {
+      const rawBody = await c.req.json();
+      const parsed = LoadMoreRequestSchema.safeParse(rawBody);
+      if (!parsed.success) {
+        return c.json(
+          { error: 'Invalid load-more request', details: parsed.error.flatten() },
+          400,
+        );
+      }
+      marketplace = parsed.data.marketplace;
+    } catch {
+      // Optional JSON body
+    }
+
+    return streamSSE(c, async (stream) => {
+      await orchestrator.loadMore(runId, marketplace, async (evt) => {
+        await stream.writeSSE({
+          event: evt.event,
+          data: JSON.stringify(evt.data),
+        });
+      });
+    });
+  });
+
+  app.post('/api/searches/:runId/retry/:marketplace', async (c) => {
+    const runId = c.req.param('runId');
+    if (!orchestrator.hasRun(runId)) {
+      return c.json({ error: 'Search run not found' }, 404);
+    }
+
+    const mpParsed = MarketplaceIdSchema.safeParse(c.req.param('marketplace'));
+    if (!mpParsed.success) {
+      return c.json({ error: 'Invalid Marketplace' }, 400);
+    }
+
+    return streamSSE(c, async (stream) => {
+      await orchestrator.retryMarketplace(runId, mpParsed.data, async (evt) => {
+        await stream.writeSSE({
+          event: evt.event,
+          data: JSON.stringify(evt.data),
+        });
+      });
+    });
   });
 
   app.post('/api/browser/:marketplace/open-session', async (c) => {
