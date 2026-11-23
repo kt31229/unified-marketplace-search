@@ -408,3 +408,71 @@ dialog.ums-dialog::backdrop {
   background: var(--skip-bg);
   color: var(--skip-text);
 }
+
+.watchlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 14px;
+}
+
+.watchlist-toggle-btn {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.watchlist-toggle-btn:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.watchlist-toggle-btn[aria-pressed="true"] {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.toast-stack {
+  position: fixed;
+  inset: 16px 16px auto auto;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 260px;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+.toast-item.toast-visible,
+.toast-item:popover-open {
+  display: flex;
+}

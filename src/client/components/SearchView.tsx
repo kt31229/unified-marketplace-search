@@ -22,9 +22,16 @@ import { StatusStrip } from './StatusStrip.tsx';
 export interface SearchViewProps {
   fetchImpl: FetchLike;
   unifiedFilters: UnifiedFilter;
+  watchlistedKeys?: ReadonlySet<string>;
+  onToggleWatchlist?: (listing: Listing) => void;
 }
 
-export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
+export function SearchView({
+  fetchImpl,
+  unifiedFilters,
+  watchlistedKeys,
+  onToggleWatchlist,
+}: SearchViewProps) {
   const [keywords, setKeywords] = useState('');
   const [enabledMarketplaces, setEnabledMarketplaces] = useState<MarketplaceId[]>([
     ...MARKETPLACE_IDS,
@@ -335,7 +342,11 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
             onOpenBrowserSession={(mp, url) => void handleOpenBrowserSession(mp, url)}
           />
 
-          <ListingGrid listings={sortedListings} />
+          <ListingGrid
+            listings={sortedListings}
+            watchlistedKeys={watchlistedKeys}
+            onToggleWatchlist={onToggleWatchlist}
+          />
 
           <footer className="panel-box flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-slate-600 tabular">
