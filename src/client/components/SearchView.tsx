@@ -37,6 +37,8 @@ export interface SearchViewProps {
   sortOrder: SortOrder;
   onSortOrderChange: (sortOrder: SortOrder) => void;
   pendingRunRequest: TriggeredSearchRequest | null;
+  watchlistedKeys?: ReadonlySet<string>;
+  onToggleWatchlist?: (listing: Listing) => void;
 }
 
 export function SearchView({
@@ -49,6 +51,8 @@ export function SearchView({
   sortOrder,
   onSortOrderChange,
   pendingRunRequest,
+  watchlistedKeys,
+  onToggleWatchlist,
 }: SearchViewProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
@@ -379,7 +383,11 @@ export function SearchView({
             onOpenBrowserSession={(mp, url) => void handleOpenBrowserSession(mp, url)}
           />
 
-          <ListingGrid listings={sortedListings} />
+          <ListingGrid
+            listings={sortedListings}
+            watchlistedKeys={watchlistedKeys}
+            onToggleWatchlist={onToggleWatchlist}
+          />
 
           <footer className="panel-box flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-slate-600 tabular">

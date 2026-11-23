@@ -1,22 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_FACEBOOK_CITY_HUBS,
   MARKETPLACE_IDS,
   createDefaultUnifiedFilter,
   suggestSavedSearchName,
   type FacebookCityHub,
+  type Listing,
   type MarketplaceId,
   type SavedSearch,
   type SettingsResponse,
   type SortOrder,
   type UnifiedFilter,
+  type WatchlistEntry,
+  type WatchlistSnapshotInput,
 } from '../shared/index.ts';
 import { ConfirmDialog } from './components/ConfirmDialog.tsx';
 import { SaveSearchDialog } from './components/SaveSearchDialog.tsx';
 import { SavedSearchesPanel } from './components/SavedSearchesPanel.tsx';
 import { SearchView, type TriggeredSearchRequest } from './components/SearchView.tsx';
 import { SettingsView, type FetchLike } from './components/SettingsView.tsx';
+import { UndoToast } from './components/UndoToast.tsx';
 import { UnifiedFiltersPanel } from './components/UnifiedFiltersPanel.tsx';
+import { WatchlistView } from './components/WatchlistView.tsx';
 
 export type WorkbenchView = 'search' | 'watchlist' | 'settings';
 
@@ -123,6 +128,27 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
   const [unifiedFilters, setUnifiedFilters] = useState<UnifiedFilter>(() =>
     createDefaultUnifiedFilter(),
   );
+  const [watchlistEntries, setWatchlistEntries] = useState<WatchlistEntry[]>([]);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [undoEntry, setUndoEntry] = useState<WatchlistEntry | null>(null);
+
+  const loadWatchlist = useCallback(async () => {
+    setWatchlistLoading(true);
+    try {
+      const res = await fetchImpl('/api/watchlist');
+      if (!res.ok) {
+        return;
+      }
+      const json = (await res.json()) as { entries?: WatchlistEntry[] };
+      if (Array.isArray(json.entries)) {
+        setWatchlistEntries(json.entries);
+      }
+    } catch {
+      // Ignore if watchlist endpoint is unavailable in isolated tests
+    } finally {
+      setWatchlistLoading(false);
+    }
+  }, [fetchImpl]);
 
   const [keywords, setKeywords] = useState('');
   const [enabledMarketplaces, setEnabledMarketplaces] = useState<MarketplaceId[]>([
@@ -175,10 +201,92 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
         // Fallback to default Unified Filter settings if settings endpoint is unavailable
       });
 
+    void loadWatchlist();
+
     return () => {
       active = false;
     };
-  }, [fetchImpl]);
+  }, [fetchImpl, loadWatchlist]);
+
+  useEffect(() => {
+    if (activeView === 'watchlist') {
+      void loadWatchlist();
+    }
+  }, [activeView, loadWatchlist]);
+
+  const watchlistedKeys = useMemo(
+    () =>
+      new Set(watchlistEntries.map((entry) => `${entry.marketplace}:${entry.marketplaceListingId}`)),
+    [watchlistEntries],
+  );
+
+  const saveWatchlistSnapshot = async (snapshot: WatchlistSnapshotInput) => {
+    const res = await fetchImpl('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ listing: snapshot }),
+    });
+    if (!res.ok) {
+      return;
+    }
+    const json = (await res.json()) as { entry?: WatchlistEntry };
+    const saved = json.entry;
+    if (!saved) {
+      return;
+    }
+    setWatchlistEntries((prev) => [
+      saved,
+      ...prev.filter(
+        (e) =>
+          !(
+            e.marketplace === saved.marketplace &&
+            e.marketplaceListingId === saved.marketplaceListingId
+          ),
+      ),
+    ]);
+  };
+
+  const removeWatchlistEntry = async (marketplace: MarketplaceId, listingId: string) => {
+    const target = watchlistEntries.find(
+      (e) => e.marketplace === marketplace && e.marketplaceListingId === listingId,
+    );
+    setWatchlistEntries((prev) =>
+      prev.filter((e) => !(e.marketplace === marketplace && e.marketplaceListingId === listingId)),
+    );
+    if (target) {
+      setUndoEntry(target);
+    }
+
+    try {
+      await fetchImpl(`/api/watchlist/${marketplace}/${encodeURIComponent(listingId)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // Keep optimistic UI state unless user clicks Undo
+    }
+  };
+
+  const handleToggleWatchlist = (listing: Listing) => {
+    const key = `${listing.marketplace}:${listing.marketplaceListingId}`;
+    if (watchlistedKeys.has(key)) {
+      void removeWatchlistEntry(listing.marketplace, listing.marketplaceListingId);
+    } else {
+      void saveWatchlistSnapshot(listing);
+    }
+  };
+
+  const handleUndoRemove = (entry: WatchlistEntry) => {
+    setUndoEntry(null);
+    void saveWatchlistSnapshot({
+      marketplace: entry.marketplace,
+      marketplaceListingId: entry.marketplaceListingId,
+      url: entry.url,
+      title: entry.title,
+      price: entry.price,
+      shippingPrice: entry.shippingPrice,
+      thumbnailUrl: entry.thumbnailUrl,
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -400,6 +508,9 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
             onClick={() => setActiveView('watchlist')}
           >
             <span>Watchlist</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 tabular">
+              {watchlistEntries.length}
+            </span>
           </button>
           <button
             type="button"
@@ -441,7 +552,7 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
       </aside>
 
       <main className="shell-a-main">
-        {activeView === 'search' && (
+        <div hidden={activeView !== 'search'}>
           <SearchView
             fetchImpl={fetchImpl}
             unifiedFilters={unifiedFilters}
@@ -458,17 +569,19 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
             sortOrder={sortOrder}
             onSortOrderChange={setSortOrder}
             pendingRunRequest={pendingRunRequest}
+            watchlistedKeys={watchlistedKeys}
+            onToggleWatchlist={handleToggleWatchlist}
           />
-        )}
+        </div>
 
         {activeView === 'watchlist' && (
-          <section className="panel-box flex flex-col gap-2">
-            <h1 className="m-0 text-lg font-semibold text-slate-900">Watchlist</h1>
-            <p className="m-0 text-sm text-slate-600">
-              Your flat PII-free Watchlist Entries with local thumbnail caching will appear here
-              (coming in Ticket #20).
-            </p>
-          </section>
+          <WatchlistView
+            entries={watchlistEntries}
+            loading={watchlistLoading}
+            onRemove={(entry) =>
+              void removeWatchlistEntry(entry.marketplace, entry.marketplaceListingId)
+            }
+          />
         )}
 
         {activeView === 'settings' && <SettingsView fetchImpl={fetchImpl} />}
@@ -494,6 +607,12 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
         danger
         onConfirm={() => void handleConfirmDeleteSavedSearch()}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <UndoToast
+        entry={undoEntry}
+        onUndo={handleUndoRemove}
+        onDismiss={() => setUndoEntry(null)}
       />
     </div>
   );

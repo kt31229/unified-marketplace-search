@@ -1,4 +1,11 @@
-import { MARKETPLACE_IDS, type Listing, type MarketplaceId, type SortOrder } from './schemas.ts';
+import {
+  MARKETPLACE_IDS,
+  type Listing,
+  type MarketplaceId,
+  type SortOrder,
+  type WatchlistEntry,
+  type WatchlistSortOrder,
+} from './schemas.ts';
 
 export interface SortListingsOptions {
   includeKnownShipping?: boolean;
@@ -104,6 +111,50 @@ export function sortListings(
     }
 
     return a.adapterRank - b.adapterRank;
+  });
+
+  return copy;
+}
+
+/**
+ * Sorts Watchlist Entries by newest saved (default) or base price,
+ * always pushing entries with null prices to the bottom.
+ */
+export function sortWatchlistEntries(
+  entries: readonly WatchlistEntry[],
+  sortOrder: WatchlistSortOrder = 'saved_desc',
+): WatchlistEntry[] {
+  const copy = [...entries];
+
+  const compareSavedDesc = (a: WatchlistEntry, b: WatchlistEntry): number => {
+    const diff = Date.parse(b.savedAt) - Date.parse(a.savedAt);
+    if (diff !== 0 && !Number.isNaN(diff)) {
+      return diff;
+    }
+    return b.savedAt.localeCompare(a.savedAt);
+  };
+
+  if (sortOrder === 'saved_desc') {
+    copy.sort(compareSavedDesc);
+    return copy;
+  }
+
+  const direction = sortOrder === 'price_asc' ? 1 : -1;
+  copy.sort((a, b) => {
+    if (a.price == null && b.price == null) {
+      return compareSavedDesc(a, b);
+    }
+    if (a.price == null) {
+      return 1;
+    }
+    if (b.price == null) {
+      return -1;
+    }
+    const diff = (a.price - b.price) * direction;
+    if (diff !== 0) {
+      return diff;
+    }
+    return compareSavedDesc(a, b);
   });
 
   return copy;

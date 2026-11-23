@@ -234,6 +234,26 @@ export const WatchlistEntrySchema = z.object({
 
 export type WatchlistEntry = z.infer<typeof WatchlistEntrySchema>;
 
+export const WatchlistSortOrderSchema = z.enum(['saved_desc', 'price_asc', 'price_desc']);
+export type WatchlistSortOrder = z.infer<typeof WatchlistSortOrderSchema>;
+
+export const WatchlistSnapshotInputSchema = z.object({
+  marketplace: MarketplaceIdSchema,
+  marketplaceListingId: z.string().min(1),
+  url: z.string().url(),
+  title: z.string().min(1),
+  price: z.number().nonnegative().nullable().optional().default(null),
+  shippingPrice: z.number().nonnegative().nullable().optional().default(null),
+  thumbnailUrl: z.string().url().nullable().optional().default(null),
+});
+
+export type WatchlistSnapshotInput = z.infer<typeof WatchlistSnapshotInputSchema>;
+
+export const CreateWatchlistEntryRequestSchema = z.union([
+  z.object({ listing: WatchlistSnapshotInputSchema }).transform((v) => v.listing),
+  WatchlistSnapshotInputSchema,
+]);
+
 export const AppSettingsSchema = z.object({
   browserChannel: BrowserChannelSchema,
   homePostalCode: z.string().trim().nullable(),
