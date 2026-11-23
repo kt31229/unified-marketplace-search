@@ -62,6 +62,9 @@ function formatStatusBadge(status: MarketplaceStatus): {
       return { label: 'Network error', toneClass: 'status-badge-danger' };
     case 'success':
     case 'empty':
+      if (status.stoppedByUser) {
+        return { label: 'Stopped', toneClass: 'status-badge-warn' };
+      }
       if (status.translationStatus === 'broadened') {
         return { label: 'Broadened', toneClass: 'status-badge-warn' };
       }
@@ -73,7 +76,9 @@ interface StatusCardProps {
   marketplace: MarketplaceId;
   status: MarketplaceStatus | undefined;
   isRetrying: boolean;
+  isStoppingFacebook?: boolean;
   onRetry: (marketplace: MarketplaceId) => void;
+  onStopFacebook?: () => void;
   onOpenBrowserSession: (marketplace: BrowserMarketplaceId, url?: string) => void;
 }
 
@@ -81,7 +86,9 @@ function StatusCard({
   marketplace,
   status,
   isRetrying,
+  isStoppingFacebook,
   onRetry,
+  onStopFacebook,
   onOpenBrowserSession,
 }: StatusCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -248,6 +255,9 @@ function StatusCard({
 
   const badge = formatStatusBadge(status);
   const diagnosticLines: string[] = [...status.notices];
+  if (status.stoppedByUser) {
+    diagnosticLines.push('Facebook sweep stopped early; earlier Listings retained.');
+  }
   if (status.droppedMalformedCount > 0) {
     diagnosticLines.push(`Skipped ${status.droppedMalformedCount} malformed node(s).`);
   }
@@ -271,7 +281,24 @@ function StatusCard({
       style={{ anchorName: `--status-card-${marketplace}` } as React.CSSProperties}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className={`mp-badge mp-badge-${marketplace}`}>{label}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={`mp-badge mp-badge-${marketplace}`}>{label}</span>
+          {marketplace === 'facebook' && status.runStatus === 'running' && (
+            <button
+              type="button"
+              className="fb-sweep-stop-btn"
+              aria-label="Stop Facebook sweep"
+              title="Stop Facebook sweep"
+              disabled={isStoppingFacebook}
+              onClick={onStopFacebook}
+            >
+              <span className="fb-spinner-icon" aria-hidden="true" />
+              <span className="fb-stop-icon" aria-hidden="true">
+                ×
+              </span>
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           <span className={`status-badge ${badge.toneClass}`}>{badge.label}</span>
           <button
@@ -385,14 +412,18 @@ function StatusCard({
 export interface StatusStripProps {
   statuses: Partial<Record<MarketplaceId, MarketplaceStatus>>;
   retryingMarketplace: MarketplaceId | null;
+  isStoppingFacebook?: boolean;
   onRetry: (marketplace: MarketplaceId) => void;
+  onStopFacebook?: () => void;
   onOpenBrowserSession: (marketplace: BrowserMarketplaceId, url?: string) => void;
 }
 
 export function StatusStrip({
   statuses,
   retryingMarketplace,
+  isStoppingFacebook,
   onRetry,
+  onStopFacebook,
   onOpenBrowserSession,
 }: StatusStripProps) {
   return (
@@ -403,7 +434,9 @@ export function StatusStrip({
           marketplace={mp}
           status={statuses[mp]}
           isRetrying={retryingMarketplace === mp}
+          isStoppingFacebook={mp === 'facebook' ? isStoppingFacebook : false}
           onRetry={onRetry}
+          onStopFacebook={mp === 'facebook' ? onStopFacebook : undefined}
           onOpenBrowserSession={onOpenBrowserSession}
         />
       ))}

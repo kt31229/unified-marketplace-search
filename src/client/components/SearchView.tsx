@@ -36,6 +36,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
   const [searchRunId, setSearchRunId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isStoppingFacebook, setIsStoppingFacebook] = useState(false);
   const [retryingMarketplace, setRetryingMarketplace] = useState<MarketplaceId | null>(null);
   const [statuses, setStatuses] = useState<Partial<Record<MarketplaceId, MarketplaceStatus>>>({});
   const [listings, setListings] = useState<Listing[]>([]);
@@ -83,6 +84,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
       setStatuses(payload.statuses);
       setListings([]);
       setHasMoreByMp({});
+      setIsStoppingFacebook(false);
       return;
     }
 
@@ -222,6 +224,31 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
     }
   };
 
+  const handleStopFacebook = async () => {
+    if (!searchRunId || isStoppingFacebook) {
+      return;
+    }
+    setIsStoppingFacebook(true);
+    try {
+      const response = await fetchImpl(`/api/searches/${searchRunId}/stop-facebook`, {
+        method: 'POST',
+      });
+      if (response.ok) {
+        const json = (await response.json().catch(() => null)) as {
+          status?: MarketplaceStatus | null;
+        } | null;
+        if (json?.status) {
+          setStatuses((prev) => ({
+            ...prev,
+            facebook: json.status!,
+          }));
+        }
+      }
+    } finally {
+      setIsStoppingFacebook(false);
+    }
+  };
+
   const handleOpenBrowserSession = async (mp: BrowserMarketplaceId, url?: string) => {
     setSessionNotice(null);
     const response = await fetchImpl(`/api/browser/${mp}/open-session`, {
@@ -331,7 +358,9 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
           <StatusStrip
             statuses={statuses}
             retryingMarketplace={retryingMarketplace}
+            isStoppingFacebook={isStoppingFacebook}
             onRetry={(mp) => void handleRetryMarketplace(mp)}
+            onStopFacebook={() => void handleStopFacebook()}
             onOpenBrowserSession={(mp, url) => void handleOpenBrowserSession(mp, url)}
           />
 

@@ -19,9 +19,46 @@ function getTotalPriceTieBreaker(listing: Listing): { hasKnownTotal: boolean; to
   };
 }
 
+function interleaveByHub(listings: Listing[]): Listing[] {
+  const hubBuckets = new Map<string, Listing[]>();
+  for (const listing of listings) {
+    const key = listing.hubSlug ?? '__default';
+    let bucket = hubBuckets.get(key);
+    if (!bucket) {
+      bucket = [];
+      hubBuckets.set(key, bucket);
+    }
+    bucket.push(listing);
+  }
+  for (const bucket of hubBuckets.values()) {
+    bucket.sort((a, b) => a.adapterRank - b.adapterRank);
+  }
+  if (hubBuckets.size <= 1) {
+    return Array.from(hubBuckets.values())[0] ?? [];
+  }
+
+  const orderedBuckets = Array.from(hubBuckets.values());
+  const interleaved: Listing[] = [];
+  let index = 0;
+  let added = true;
+  while (added) {
+    added = false;
+    for (const bucket of orderedBuckets) {
+      const next = bucket[index];
+      if (next) {
+        interleaved.push(next);
+        added = true;
+      }
+    }
+    index += 1;
+  }
+  return interleaved;
+}
+
 /**
  * Merges and sorts Listings across Marketplaces according to ADR-0004 invariants:
  * - relevance: deterministic round-robin interleaving by adapterRank across active Marketplaces
+ *   (and across Facebook City Hubs within Facebook's bucket)
  * - newest: global listedAt descending (null listedAt placed after timestamped Listings, ordered by adapterRank)
  * - price_asc / price_desc: base price (or price + known shipping when enabled), tie-broken by known total price
  */
@@ -43,8 +80,12 @@ export function sortListings(
         bucket.push(listing);
       }
     }
-    for (const bucket of buckets.values()) {
-      bucket.sort((a, b) => a.adapterRank - b.adapterRank);
+    for (const [mp, bucket] of buckets.entries()) {
+      if (mp === 'facebook') {
+        buckets.set(mp, interleaveByHub(bucket));
+      } else {
+        bucket.sort((a, b) => a.adapterRank - b.adapterRank);
+      }
     }
 
     const result: Listing[] = [];

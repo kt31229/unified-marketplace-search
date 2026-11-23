@@ -68,4 +68,5 @@ export interface MarketplaceAdapter {
   ): AdapterTranslationResult;
   executeInitial(params: AdapterSearchParams): Promise<AdapterBatchResult>;
   loadMore(params: AdapterLoadMoreParams): Promise<AdapterBatchResult>;
+  clearChallengeLatch?(): void;
 }

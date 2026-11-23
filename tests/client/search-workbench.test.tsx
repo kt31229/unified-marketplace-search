@@ -489,4 +489,174 @@ describe('Search Workbench UI', () => {
       expect(within(poshCard).getByText('Exact')).toBeInTheDocument();
     });
   });
+
+  it('renders inline Facebook spinner-to-red-x stop control while sweeping, calls stop-facebook, and preserves rendered Listings', async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      calls.push({ url, method });
+
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+
+      if (url === '/api/searches/stream') {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller;
+            controller.enqueue(
+              encoder.encode(
+                encodeSse([
+                  {
+                    event: 'run_started',
+                    data: {
+                      searchRunId: 'run-fb-stop',
+                      diagnostics: makeDiagnostics(['facebook']),
+                      statuses: makeStatuses(['facebook'], {
+                        facebook: {
+                          runStatus: 'running',
+                          loadedCount: 0,
+                          completedCities: 1,
+                          totalCities: 8,
+                          currentCityLabel: 'Seattle, WA',
+                          errorMessage: null,
+                        },
+                      }),
+                    },
+                  },
+                  {
+                    event: 'listings_batch',
+                    data: {
+                      searchRunId: 'run-fb-stop',
+                      marketplace: 'facebook',
+                      cityHub: 'seattle',
+                      listings: [
+                        {
+                          marketplace: 'facebook',
+                          marketplaceListingId: 'fb-sea-1',
+                          url: 'https://www.facebook.com/marketplace/item/fb-sea-1/',
+                          title: 'Seattle Patagonia Vest',
+                          price: 45,
+                          shippingPrice: null,
+                          shippingType: 'local_pickup_only',
+                          listingFormat: 'fixed_price',
+                          bidCount: null,
+                          buyNowPrice: null,
+                          thumbnailUrl: null,
+                          conditionLabel: 'used_good',
+                          locationLabel: 'Seattle, WA',
+                          listedAt: '2026-11-22T01:00:00Z',
+                          adapterRank: 1,
+                          hubSlug: 'seattle',
+                        },
+                      ],
+                      hasMore: false,
+                    },
+                  },
+                  {
+                    event: 'marketplace_status',
+                    data: {
+                      searchRunId: 'run-fb-stop',
+                      status: makeStatuses(['facebook'], {
+                        facebook: {
+                          runStatus: 'running',
+                          loadedCount: 1,
+                          completedCities: 2,
+                          totalCities: 8,
+                          currentCityLabel: 'San Francisco, CA',
+                          errorMessage: null,
+                        },
+                      }).facebook,
+                    },
+                  },
+                ]),
+              ),
+            );
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      }
+
+      if (url === '/api/searches/run-fb-stop/stop-facebook' && method === 'POST') {
+        const stoppedStatus = makeStatuses(['facebook'], {
+          facebook: {
+            runStatus: 'success',
+            loadedCount: 1,
+            completedCities: 1,
+            totalCities: 8,
+            currentCityLabel: null,
+            stoppedByUser: true,
+            errorMessage: null,
+          },
+        }).facebook;
+
+        streamController?.enqueue(
+          encoder.encode(
+            encodeSse([
+              {
+                event: 'marketplace_status',
+                data: { searchRunId: 'run-fb-stop', status: stoppedStatus },
+              },
+              {
+                event: 'run_complete',
+                data: {
+                  searchRunId: 'run-fb-stop',
+                  statuses: { facebook: stoppedStatus },
+                },
+              },
+            ]),
+          ),
+        );
+        streamController?.close();
+
+        return new Response(
+          JSON.stringify({ ok: true, stopped: true, status: stoppedStatus }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
+    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }));
+
+    const fbCard = await screen.findByTestId('status-card-facebook');
+    await waitFor(() => {
+      expect(within(fbCard).getByText('City 2 of 8')).toBeInTheDocument();
+      expect(within(fbCard).getByText('San Francisco, CA')).toBeInTheDocument();
+      expect(screen.getByText('Seattle Patagonia Vest')).toBeInTheDocument();
+    });
+
+    // Inline spinner-to-red-x stop button is rendered next to Facebook badge while sweeping
+    const stopBtn = within(fbCard).getByRole('button', { name: /Stop Facebook sweep/i });
+    expect(stopBtn).toHaveClass('fb-sweep-stop-btn');
+    expect(stopBtn.querySelector('.fb-spinner-icon')).toBeInTheDocument();
+    expect(stopBtn.querySelector('.fb-stop-icon')).toHaveTextContent('×');
+
+    // Hover/focus and click calls POST /api/searches/run-fb-stop/stop-facebook
+    await userEvent.hover(stopBtn);
+    await userEvent.click(stopBtn);
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (c) => c.url === '/api/searches/run-fb-stop/stop-facebook' && c.method === 'POST',
+        ),
+      ).toBe(true);
+      expect(within(fbCard).queryByRole('button', { name: /Stop Facebook sweep/i })).toBeNull();
+      expect(within(fbCard).getByText('Stopped')).toBeInTheDocument();
+    });
+
+    // Already-rendered Seattle Listing remains in the grid
+    expect(screen.getByText('Seattle Patagonia Vest')).toBeInTheDocument();
+  });
 });

@@ -17,6 +17,7 @@ import {
   type SettingsResponse,
 } from '../shared/index.ts';
 import { createEbayAdapter } from './adapters/ebay.ts';
+import { createFacebookAdapter } from './adapters/facebook.ts';
 import { createBrowserPlaceholderAdapter } from './adapters/placeholders.ts';
 import { createPoshmarkAdapter } from './adapters/poshmark.ts';
 import type {
@@ -117,12 +118,17 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     browserSessionManager,
     clock: deps.clock,
   });
+  const defaultFacebookAdapter = createFacebookAdapter({
+    browserSessionManager,
+    clock: deps.clock,
+    sleep: deps.sleep,
+  });
 
   const adapters: Record<MarketplaceId, MarketplaceAdapter> = {
     ebay: deps.adapters?.ebay ?? defaultEbayAdapter,
     poshmark: deps.adapters?.poshmark ?? defaultPoshmarkAdapter,
     mercari: deps.adapters?.mercari ?? createBrowserPlaceholderAdapter('mercari'),
-    facebook: deps.adapters?.facebook ?? createBrowserPlaceholderAdapter('facebook'),
+    facebook: deps.adapters?.facebook ?? defaultFacebookAdapter,
   };
 
   const orchestrator = new SearchOrchestrator({
@@ -320,6 +326,15 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     });
   });
 
+  app.post('/api/searches/:runId/stop-facebook', (c) => {
+    const runId = c.req.param('runId');
+    const result = orchestrator.stopFacebookSweep(runId);
+    if (!result.found) {
+      return c.json({ error: 'Search run not found' }, 404);
+    }
+    return c.json({ ok: true, stopped: true, status: result.status });
+  });
+
   app.post('/api/browser/:marketplace/open-session', async (c) => {
     const mpParsed = BrowserMarketplaceIdSchema.safeParse(c.req.param('marketplace'));
     if (!mpParsed.success) {
@@ -342,6 +357,7 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
       } else {
         await browserSessionManager.openForegroundSession(mpParsed.data, url);
       }
+      orchestrator.clearMarketplaceChallenge(mpParsed.data);
     } catch (err) {
       return c.json(
         {
@@ -371,6 +387,7 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     } else {
       await browserSessionManager.resetProfile(marketplace);
     }
+    orchestrator.clearMarketplaceChallenge(marketplace);
 
     return c.json({
       reset: true,
