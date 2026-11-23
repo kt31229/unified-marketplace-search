@@ -1,5 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  DEFAULT_FACEBOOK_CITY_HUBS,
+  createDefaultUnifiedFilter,
+  type FacebookCityHub,
+  type SettingsResponse,
+  type UnifiedFilter,
+} from '../shared/index.ts';
+import { SearchView } from './components/SearchView.tsx';
 import { SettingsView, type FetchLike } from './components/SettingsView.tsx';
+import { UnifiedFiltersPanel } from './components/UnifiedFiltersPanel.tsx';
 
 export type WorkbenchView = 'search' | 'watchlist' | 'settings';
 
@@ -10,6 +19,52 @@ export interface AppProps {
 
 export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
   const [activeView, setActiveView] = useState<WorkbenchView>(initialView);
+  const [availableHubs, setAvailableHubs] = useState<FacebookCityHub[]>(
+    DEFAULT_FACEBOOK_CITY_HUBS,
+  );
+  const [defaultFilterBaseline, setDefaultFilterBaseline] = useState<UnifiedFilter>(() =>
+    createDefaultUnifiedFilter(),
+  );
+  const [unifiedFilters, setUnifiedFilters] = useState<UnifiedFilter>(() =>
+    createDefaultUnifiedFilter(),
+  );
+
+  useEffect(() => {
+    let active = true;
+    fetchImpl('/api/settings')
+      .then(async (res) => {
+        if (!res.ok) {
+          return null;
+        }
+        return (await res.json()) as SettingsResponse;
+      })
+      .then((json) => {
+        if (!active || !json?.settings) {
+          return;
+        }
+        const hubs = json.settings.facebookCityHubs;
+        const seeded = createDefaultUnifiedFilter(json.settings);
+        setAvailableHubs(hubs);
+        setDefaultFilterBaseline(seeded);
+        setUnifiedFilters((prev) => ({
+          ...prev,
+          facebookLocationSlugs:
+            prev.facebookLocationSlugs.length === DEFAULT_FACEBOOK_CITY_HUBS.length
+              ? seeded.facebookLocationSlugs
+              : prev.facebookLocationSlugs,
+          facebookRadiusMiles: seeded.facebookRadiusMiles,
+          localPickupPostalCode: prev.localPickupPostalCode ?? seeded.localPickupPostalCode,
+          localPickupRadiusMiles: prev.localPickupRadiusMiles ?? seeded.localPickupRadiusMiles,
+        }));
+      })
+      .catch(() => {
+        // Fallback to default Unified Filter settings if settings endpoint is unavailable
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [fetchImpl]);
 
   return (
     <div className="shell-a">
@@ -55,31 +110,21 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
             </h2>
           </div>
           <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
-            Saved Searches will appear here once search execution is wired (#19).
+            Saved Searches will appear here once search persistence is wired (#19).
           </div>
         </section>
 
-        <section className="sidebar-section" aria-label="Unified Filters">
-          <div className="flex items-center justify-between">
-            <h2 className="m-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Unified Filters
-            </h2>
-          </div>
-          <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
-            Price, 5-tier Condition, Fulfillment, and Facebook City Hubs filters (#17).
-          </div>
-        </section>
+        <UnifiedFiltersPanel
+          filters={unifiedFilters}
+          availableHubs={availableHubs}
+          onChange={setUnifiedFilters}
+          onReset={() => setUnifiedFilters(defaultFilterBaseline)}
+        />
       </aside>
 
       <main className="shell-a-main">
         {activeView === 'search' && (
-          <section className="panel-box flex flex-col gap-2">
-            <h1 className="m-0 text-lg font-semibold text-slate-900">Search Workbench</h1>
-            <p className="m-0 text-sm text-slate-600">
-              Enter keywords, toggle target Marketplaces, and stream Listings across eBay,
-              Poshmark, Mercari US, and Facebook Marketplace (coming in Ticket #17).
-            </p>
-          </section>
+          <SearchView fetchImpl={fetchImpl} unifiedFilters={unifiedFilters} />
         )}
 
         {activeView === 'watchlist' && (
