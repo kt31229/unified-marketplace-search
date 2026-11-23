@@ -28,9 +28,10 @@ function formatShippingBadge(listing: Listing): { label: string; className: stri
 
 export interface ListingGridProps {
   listings: readonly Listing[];
+  newListingKeys?: ReadonlySet<string>;
 }
 
-export function ListingGrid({ listings }: ListingGridProps) {
+export function ListingGrid({ listings, newListingKeys }: ListingGridProps) {
   if (listings.length === 0) {
     return (
       <div className="panel-box text-sm text-slate-600">
@@ -44,10 +45,12 @@ export function ListingGrid({ listings }: ListingGridProps) {
       {listings.map((listing) => {
         const shipping = formatShippingBadge(listing);
         const mpLabel = MARKETPLACE_LABELS[listing.marketplace];
+        const key = `${listing.marketplace}:${listing.marketplaceListingId}`;
+        const isNew = newListingKeys?.has(key) ?? false;
 
         return (
           <article
-            key={`${listing.marketplace}:${listing.marketplaceListingId}`}
+            key={key}
             className="listing-card"
           >
             <a
@@ -73,7 +76,10 @@ export function ListingGrid({ listings }: ListingGridProps) {
 
             <div className="flex flex-1 flex-col gap-1.5 p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className={`mp-badge mp-badge-${listing.marketplace}`}>{mpLabel}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`mp-badge mp-badge-${listing.marketplace}`}>{mpLabel}</span>
+                  {isNew && <span className="new-badge">New</span>}
+                </div>
                 {listing.listingFormat === 'auction' && (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">
                     Auction
