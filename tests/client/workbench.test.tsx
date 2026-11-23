@@ -90,6 +90,20 @@ function createFetchMock(initial: SettingsResponse) {
       });
     }
 
+    if (url === '/api/browser/poshmark/open-session' && method === 'POST') {
+      state = {
+        ...state,
+        browserProfiles: {
+          ...state.browserProfiles,
+          poshmark: { exists: true, activeContext: true },
+        },
+      };
+      return new Response(JSON.stringify({ ok: true, marketplace: 'poshmark' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     if (url === '/api/browser/facebook/reset-profile' && method === 'POST') {
       state = {
         ...state,
@@ -221,6 +235,18 @@ describe('Workbench Sidebar and Settings UI', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Browser Sessions & Profiles/i)).toBeInTheDocument();
+    });
+
+    const poshRow = screen.getByTestId('profile-row-poshmark');
+    await userEvent.click(within(poshRow).getByRole('button', { name: /Open browser session/i }));
+
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (c) => c.url === '/api/browser/poshmark/open-session' && c.method === 'POST',
+        ),
+      ).toBe(true);
+      expect(within(poshRow).getByText(/Active browser session/i)).toBeInTheDocument();
     });
 
     const fbRow = screen.getByTestId('profile-row-facebook');
