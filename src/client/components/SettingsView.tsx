@@ -42,6 +42,7 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
 
   // Profile Reset <dialog> state
   const [resetTarget, setResetTarget] = useState<BrowserMarketplaceId | null>(null);
+  const [openingProfile, setOpeningProfile] = useState<BrowserMarketplaceId | null>(null);
 
   const syncFromResponse = (res: SettingsResponse) => {
     setData(res);
@@ -218,15 +219,31 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
   const handleOpenSession = async (marketplace: BrowserMarketplaceId) => {
     setStatusMessage(null);
     setErrorMessage(null);
-    const res = await fetchImpl(`/api/browser/${marketplace}/open-session`, {
-      method: 'POST',
-    });
-    if (!res.ok) {
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      setErrorMessage(json.error ?? `Could not open ${MARKETPLACE_LABELS[marketplace]} session.`);
-      return;
+    setOpeningProfile(marketplace);
+    try {
+      const res = await fetchImpl(`/api/browser/${marketplace}/open-session`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        setErrorMessage(json.error ?? `Could not open ${MARKETPLACE_LABELS[marketplace]} session.`);
+        return;
+      }
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              browserProfiles: {
+                ...prev.browserProfiles,
+                [marketplace]: { exists: true, activeContext: true },
+              },
+            }
+          : prev,
+      );
+      setStatusMessage(`Opened ${MARKETPLACE_LABELS[marketplace]} browser session.`);
+    } finally {
+      setOpeningProfile(null);
     }
-    setStatusMessage(`Opened ${MARKETPLACE_LABELS[marketplace]} browser session.`);
   };
 
   const handleConfirmResetProfile = async () => {
@@ -618,14 +635,19 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
                 <div>
                   <div className="font-medium text-slate-900">{MARKETPLACE_LABELS[mp]}</div>
                   <div className="text-xs text-slate-600">
-                    {profile?.exists ? 'Profile directory present' : 'Not initialized yet'}
+                    {profile?.activeContext
+                      ? 'Active browser session'
+                      : profile?.exists
+                        ? 'Profile directory present'
+                        : 'Not initialized yet'}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    disabled={openingProfile === mp}
                     onClick={() => handleOpenSession(mp)}
-                    className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
                   >
                     Open browser session
                   </button>

@@ -373,4 +373,120 @@ describe('Search Workbench UI', () => {
       expect((refreshCall?.body?.unifiedFilters as { localPickupRadiusMiles: number }).localPickupRadiusMiles).toBe(25);
     });
   });
+
+  it('surfaces Open browser session and Retry Poshmark on challenged Poshmark status card and recovers listings on retry', async () => {
+    const calls: Array<{ url: string; method: string; body?: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+      calls.push({ url, method, body });
+
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+
+      if (url === '/api/searches/stream') {
+        return createSseResponse([
+          {
+            event: 'run_started',
+            data: {
+              searchRunId: 'run-challenge',
+              diagnostics: makeDiagnostics(['poshmark']),
+              statuses: makeStatuses(['poshmark'], {
+                poshmark: { runStatus: 'running', loadedCount: 0, errorMessage: null },
+              }),
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-challenge',
+              statuses: makeStatuses(['poshmark'], {
+                poshmark: {
+                  runStatus: 'challenge_or_auth_required',
+                  loadedCount: 0,
+                  nativeSearchUrl: 'https://poshmark.com/search?query=patagonia',
+                  errorMessage: 'Poshmark presented a CAPTCHA or login challenge.',
+                },
+              }),
+            },
+          },
+        ]);
+      }
+
+      if (url === '/api/browser/poshmark/open-session') {
+        return new Response(JSON.stringify({ ok: true, marketplace: 'poshmark' }), { status: 200 });
+      }
+
+      if (url === '/api/searches/run-challenge/retry/poshmark') {
+        return createSseResponse([
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-challenge',
+              marketplace: 'poshmark',
+              listings: [
+                {
+                  marketplace: 'poshmark',
+                  marketplaceListingId: 'pm-recovered-1',
+                  url: 'https://poshmark.com/listing/pm-recovered-1',
+                  title: 'Poshmark Recovered Fleece',
+                  price: 68,
+                  shippingPrice: 6.49,
+                  shippingType: 'known',
+                  listingFormat: 'fixed_price',
+                  bidCount: null,
+                  buyNowPrice: null,
+                  thumbnailUrl: null,
+                  conditionLabel: 'uln',
+                  locationLabel: null,
+                  listedAt: '2026-11-22T01:00:00Z',
+                  adapterRank: 1,
+                },
+              ],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-challenge',
+              statuses: makeStatuses(['poshmark'], {
+                poshmark: {
+                  runStatus: 'success',
+                  loadedCount: 1,
+                  errorMessage: null,
+                },
+              }),
+            },
+          },
+        ]);
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
+    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }));
+
+    const poshCard = await screen.findByTestId('status-card-poshmark');
+    await waitFor(() => {
+      expect(within(poshCard).getByText('Challenge')).toBeInTheDocument();
+    });
+
+    await userEvent.click(within(poshCard).getByRole('button', { name: /Open browser session/i }));
+    await waitFor(() => {
+      const openCall = calls.find((c) => c.url === '/api/browser/poshmark/open-session');
+      expect(openCall).toBeDefined();
+      expect(openCall?.body).toEqual({ url: 'https://poshmark.com/search?query=patagonia' });
+    });
+
+    await userEvent.click(within(poshCard).getByRole('button', { name: /Retry Poshmark/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Poshmark Recovered Fleece')).toBeInTheDocument();
+      expect(within(poshCard).getByText('Exact')).toBeInTheDocument();
+    });
+  });
 });
