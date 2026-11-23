@@ -937,4 +937,80 @@ describe('MercariAdapter', () => {
     expect(launches.filter((l) => l.isBackground)).toHaveLength(2);
     expect(launches.filter((l) => !l.isBackground)).toHaveLength(1);
   });
+
+  it('does not emit an unhandled rejection when waitForResponse resolves after waiter is cancelled on 403/challenge', async () => {
+    let resolveWaitForResponse!: (res: BrowserResponseHandle) => void;
+    const deferredResponse = new Promise<BrowserResponseHandle>((resolve) => {
+      resolveWaitForResponse = resolve;
+    });
+
+    const page: BrowserPageHandle = {
+      url: () => 'https://www.mercari.com/search/?keyword=jacket',
+      goto: async () => ({
+        url: () => 'https://www.mercari.com/search/?keyword=jacket',
+        status: () => 403,
+        json: async () => ({}),
+      }),
+      title: async () => 'Access Denied',
+      content: async () => '<html><body>Blocked</body></html>',
+      evaluate: (async () => undefined) as BrowserPageHandle['evaluate'],
+      waitForResponse: () => deferredResponse,
+      close: async () => undefined,
+      isClosed: () => false,
+    };
+
+    const transport: BrowserTransport = {
+      async launchPersistentContext(): Promise<BrowserContextHandle> {
+        return {
+          pages: () => [page],
+          newPage: async () => page,
+          cookies: async () => [],
+          close: async () => undefined,
+          on: () => undefined,
+        };
+      },
+    };
+
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ums-mercari-cancel-'));
+    tempDirs.push(dataDir);
+
+    const browserSessionManager = new BrowserSessionManager({
+      dataDir,
+      getBrowserChannel: () => 'chrome',
+      transport,
+    });
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const adapter = createMercariAdapter({ browserSessionManager });
+      const filters = createDefaultUnifiedFilter();
+      const translation = adapter.translateFilters('jacket', filters, 'relevance', makeContext());
+      const result = await adapter.executeInitial({
+        keywords: 'jacket',
+        translation,
+        unifiedFilters: filters,
+        sortOrder: 'relevance',
+        context: makeContext(),
+      });
+
+      expect(result.runStatus).toBe('challenge_or_auth_required');
+
+      resolveWaitForResponse({
+        url: () => 'https://www.mercari.com/v1/api?operationName=searchFacetQuery',
+        status: () => 200,
+        json: async () => ({}),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+      await browserSessionManager.shutdown();
+    }
+  });
 });

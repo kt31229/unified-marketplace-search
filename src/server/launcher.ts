@@ -3,7 +3,10 @@ import net from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { FetchLike } from './adapters/types.ts';
+import { buildLocalUrl, checkUmsHealth, defaultOpenUrl } from './launch-helpers.ts';
 import { BIND_HOST, parseServerPort } from './server.ts';
+
+export { buildLocalUrl, checkUmsHealth, defaultOpenUrl } from './launch-helpers.ts';
 
 export interface SpawnedServerHandle {
   pid?: number;
@@ -36,34 +39,6 @@ export interface LaunchAppResult {
   url: string;
 }
 
-export function buildLocalUrl(port: number): string {
-  return `http://${BIND_HOST}:${port}`;
-}
-
-export async function checkUmsHealth(
-  url: string,
-  fetchImpl: FetchLike,
-  timeoutMs: number,
-): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetchImpl(`${url}/api/health`, {
-      method: 'GET',
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      return false;
-    }
-    const json = (await res.json()) as { ok?: unknown; bindHost?: unknown } | null;
-    return Boolean(json && json.ok === true && json.bindHost === BIND_HOST);
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export async function defaultProbePortOpen(
   host: string,
   port: number,
@@ -81,34 +56,6 @@ export async function defaultProbePortOpen(
     socket.once('timeout', () => done(false));
     socket.once('error', () => done(false));
   });
-}
-
-export async function defaultOpenUrl(
-  rawUrl: string,
-  platform: NodeJS.Platform = process.platform,
-): Promise<void> {
-  const parsed = new URL(rawUrl);
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`Refusing to open unsupported URL protocol: ${parsed.protocol}`);
-  }
-  const safeUrl = parsed.toString();
-
-  if (platform === 'win32') {
-    const child = spawn('cmd', ['/c', 'start', '', safeUrl], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.unref();
-    return;
-  }
-
-  const opener = platform === 'darwin' ? 'open' : 'xdg-open';
-  const child = spawn(opener, [safeUrl], {
-    detached: true,
-    stdio: 'ignore',
-  });
-  child.unref();
 }
 
 function defaultSpawnServer(

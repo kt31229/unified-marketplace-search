@@ -359,6 +359,8 @@ function startFacetResponseWaiter(
       }
       return res;
     });
+    promise.catch(() => undefined);
+
     return {
       promise,
       cancel: () => {
@@ -401,6 +403,8 @@ function startFacetResponseWaiter(
         }
       }, timeoutMs);
     });
+
+    promise.catch(() => undefined);
 
     return {
       promise,
@@ -610,10 +614,16 @@ export class MercariAdapter implements MarketplaceAdapter {
 
     return this.runWithTimeout(async (page, remainingMs) => {
       const waiter = startFacetResponseWaiter(page, remainingMs());
-      const navResponse = await page.goto(nativeQuery.searchUrl, {
-        waitUntil: 'domcontentloaded',
-        timeout: remainingMs(),
-      });
+      let navResponse: Awaited<ReturnType<BrowserPageHandle['goto']>>;
+      try {
+        navResponse = await page.goto(nativeQuery.searchUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: remainingMs(),
+        });
+      } catch (err) {
+        waiter.cancel();
+        throw err;
+      }
 
       const navStatus = navResponse?.status();
       if (navStatus === 401 || navStatus === 403) {
