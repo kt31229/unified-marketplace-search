@@ -1,0 +1,646 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
+import {
+  BROWSER_MARKETPLACE_IDS,
+  BrowserMarketplaceIdSchema,
+  CreateSavedSearchInputSchema,
+  CreateWatchlistEntryRequestSchema,
+  LoadMoreRequestSchema,
+  MarketplaceIdSchema,
+  SearchRequestSchema,
+  UpdateEbayCredentialsInputSchema,
+  UpdateSavedSearchInputSchema,
+  UpdateSettingsInputSchema,
+  WatchlistSortOrderSchema,
+  type BrowserMarketplaceId,
+  type BrowserProfileStatus,
+  type MarketplaceId,
+  type SettingsResponse,
+  type WatchlistSortOrder,
+} from '../shared/index.ts';
+import { createEbayAdapter } from './adapters/ebay.ts';
+import { createFacebookAdapter } from './adapters/facebook.ts';
+import { createMercariAdapter } from './adapters/mercari.ts';
+import { createPoshmarkAdapter } from './adapters/poshmark.ts';
+import type {
+  ClockFn,
+  FetchLike,
+  MarketplaceAdapter,
+  SleepFn,
+} from './adapters/types.ts';
+import {
+  BrowserSessionManager,
+  type BrowserTransport,
+} from './browser-session-manager.ts';
+import { openDatabase, type AppDatabase } from './db.ts';
+import { ensureBaseDirectories, getProfileDir, resolveDataDir } from './paths.ts';
+import { SearchOrchestrator } from './search-orchestrator.ts';
+import { SecretsStore, type RawEbayCredentials } from './secrets.ts';
+import { ThumbnailCache } from './thumbnails.ts';
+
+export type TeardownHook = () => Promise<void> | void;
+
+export interface CreateAppDeps {
+  dataDir?: string;
+  env?: NodeJS.ProcessEnv;
+  staticDir?: string;
+  fetchImpl?: FetchLike;
+  thumbnailFetch?: FetchLike;
+  clock?: ClockFn;
+  sleep?: SleepFn;
+  adapters?: Partial<Record<MarketplaceId, MarketplaceAdapter>>;
+  browserTransport?: BrowserTransport;
+  browserSessionManager?: BrowserSessionManager;
+  browserIdleTimeoutMs?: number;
+  onShutdown?: () => Promise<void> | void;
+  onOpenBrowserSession?: (marketplace: BrowserMarketplaceId, url?: string) => Promise<void> | void;
+  onResetBrowserProfile?: (marketplace: BrowserMarketplaceId) => Promise<void> | void;
+  isBrowserContextActive?: (marketplace: BrowserMarketplaceId) => boolean;
+  verifyEbayCredentials?: (
+    creds: RawEbayCredentials,
+  ) => Promise<{ valid: boolean; error?: string }>;
+}
+
+export interface AppInstance {
+  app: Hono;
+  db: DatabaseSync;
+  database: AppDatabase;
+  dataDir: string;
+  secretsStore: SecretsStore;
+  browserSessionManager: BrowserSessionManager;
+  registerTeardown: (hook: TeardownHook) => void;
+  shutdown: () => Promise<void>;
+}
+
+function getBrowserProfilesStatus(
+  dataDir: string,
+  isActive?: (marketplace: BrowserMarketplaceId) => boolean,
+): Record<BrowserMarketplaceId, BrowserProfileStatus> {
+  const result = {} as Record<BrowserMarketplaceId, BrowserProfileStatus>;
+  for (const marketplace of BROWSER_MARKETPLACE_IDS) {
+    result[marketplace] = {
+      exists: fs.existsSync(getProfileDir(dataDir, marketplace)),
+      activeContext: isActive ? isActive(marketplace) : false,
+    };
+  }
+  return result;
+}
+
+/**
+ * Creates the Hono HTTP application wired to SQLite, SecretsStore, and lifecycle teardown hooks.
+ */
+export function createApp(deps: CreateAppDeps = {}): AppInstance {
+  const env = deps.env ?? process.env;
+  const dataDir = deps.dataDir ? path.resolve(deps.dataDir) : resolveDataDir({ env });
+  ensureBaseDirectories(dataDir);
+
+  const database = openDatabase(dataDir);
+  const secretsStore = new SecretsStore(dataDir, env);
+  const thumbnailCache = new ThumbnailCache({
+    dataDir,
+    watchlist: database.watchlist,
+    fetchImpl: deps.thumbnailFetch ?? deps.fetchImpl,
+  });
+  const teardownHooks: TeardownHook[] = [];
+  let isShuttingDown = false;
+
+  const browserSessionManager =
+    deps.browserSessionManager ??
+    new BrowserSessionManager({
+      dataDir,
+      getBrowserChannel: () => database.settings.getSettings().browserChannel,
+      transport: deps.browserTransport,
+      idleTimeoutMs: deps.browserIdleTimeoutMs,
+      clock: deps.clock,
+    });
+
+  const registerTeardown = (hook: TeardownHook) => {
+    teardownHooks.push(hook);
+  };
+  registerTeardown(() => browserSessionManager.shutdown());
+
+  const defaultEbayAdapter = createEbayAdapter({
+    fetchImpl: deps.fetchImpl,
+    clock: deps.clock,
+  });
+  const defaultPoshmarkAdapter = createPoshmarkAdapter({
+    browserSessionManager,
+    clock: deps.clock,
+  });
+  const defaultMercariAdapter = createMercariAdapter({
+    browserSessionManager,
+    clock: deps.clock,
+  });
+  const defaultFacebookAdapter = createFacebookAdapter({
+    browserSessionManager,
+    clock: deps.clock,
+    sleep: deps.sleep,
+  });
+
+  const adapters: Record<MarketplaceId, MarketplaceAdapter> = {
+    ebay: deps.adapters?.ebay ?? defaultEbayAdapter,
+    poshmark: deps.adapters?.poshmark ?? defaultPoshmarkAdapter,
+    mercari: deps.adapters?.mercari ?? defaultMercariAdapter,
+    facebook: deps.adapters?.facebook ?? defaultFacebookAdapter,
+  };
+
+  const orchestrator = new SearchOrchestrator({
+    adapters,
+    getSettings: () => database.settings.getSettings(),
+    secretsStore,
+    clock: deps.clock,
+    sleep: deps.sleep,
+  });
+
+  const shutdown = async () => {
+    if (isShuttingDown) {
+      return;
+    }
+    isShuttingDown = true;
+    orchestrator.abortAll();
+    await thumbnailCache.dispose();
+
+    for (let i = teardownHooks.length - 1; i >= 0; i--) {
+      const hook = teardownHooks[i];
+      if (hook) {
+        await hook();
+      }
+    }
+    database.close();
+  };
+
+  const isBrowserActive =
+    deps.isBrowserContextActive ?? ((mp: BrowserMarketplaceId) => browserSessionManager.isContextActive(mp));
+
+  const buildSettingsResponse = (): SettingsResponse => ({
+    settings: database.settings.getSettings(),
+    ebay: secretsStore.getStatus(),
+    dataDir,
+    browserProfiles: getBrowserProfilesStatus(dataDir, isBrowserActive),
+  });
+
+  const app = new Hono();
+
+  app.get('/api/health', (c) => {
+    return c.json({ ok: true, bindHost: '127.0.0.1' });
+  });
+
+  app.get('/api/settings', (c) => {
+    return c.json(buildSettingsResponse());
+  });
+
+  app.put('/api/settings', async (c) => {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = UpdateSettingsInputSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid settings payload', details: parsed.error.flatten() }, 400);
+    }
+
+    if (parsed.data.settings) {
+      database.settings.updateSettings(parsed.data.settings);
+    }
+    if (parsed.data.ebay) {
+      secretsStore.saveEbayCredentials(parsed.data.ebay);
+    }
+
+    return c.json(buildSettingsResponse());
+  });
+
+  app.put('/api/settings/ebay-credentials', async (c) => {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = UpdateEbayCredentialsInputSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid eBay credentials payload', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    secretsStore.saveEbayCredentials(parsed.data);
+    return c.json(buildSettingsResponse());
+  });
+
+  app.post('/api/settings/ebay/verify', async (c) => {
+    const creds = secretsStore.getRawCredentials();
+    if (!creds.configured) {
+      return c.json(
+        {
+          valid: false,
+          origin: creds.origin,
+          error: 'eBay client_id and client_secret must both be configured before verification.',
+        },
+        400,
+      );
+    }
+
+    if (deps.verifyEbayCredentials) {
+      const result = await deps.verifyEbayCredentials(creds);
+      return c.json({
+        valid: result.valid,
+        origin: creds.origin,
+        error: result.error,
+      });
+    }
+
+    const result = await defaultEbayAdapter.verifyCredentials(creds);
+    return c.json({
+      valid: result.valid,
+      origin: creds.origin,
+      ...(result.error ? { error: result.error } : {}),
+    });
+  });
+
+  app.post('/api/searches/stream', async (c) => {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = SearchRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid search request', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    return streamSSE(c, async (stream) => {
+      await orchestrator.startSearchStream(parsed.data, async (evt) => {
+        await stream.writeSSE({
+          event: evt.event,
+          data: JSON.stringify(evt.data),
+        });
+      });
+    });
+  });
+
+  app.post('/api/searches/:runId/load-more', async (c) => {
+    const runId = c.req.param('runId');
+    if (!orchestrator.hasRun(runId)) {
+      return c.json({ error: 'Search run not found' }, 404);
+    }
+
+    let marketplace: MarketplaceId | undefined;
+    try {
+      const rawBody = await c.req.json();
+      const parsed = LoadMoreRequestSchema.safeParse(rawBody);
+      if (!parsed.success) {
+        return c.json(
+          { error: 'Invalid load-more request', details: parsed.error.flatten() },
+          400,
+        );
+      }
+      marketplace = parsed.data.marketplace;
+    } catch {
+      // Optional JSON body
+    }
+
+    return streamSSE(c, async (stream) => {
+      await orchestrator.loadMore(runId, marketplace, async (evt) => {
+        await stream.writeSSE({
+          event: evt.event,
+          data: JSON.stringify(evt.data),
+        });
+      });
+    });
+  });
+
+  app.post('/api/searches/:runId/retry/:marketplace', async (c) => {
+    const runId = c.req.param('runId');
+    if (!orchestrator.hasRun(runId)) {
+      return c.json({ error: 'Search run not found' }, 404);
+    }
+
+    const mpParsed = MarketplaceIdSchema.safeParse(c.req.param('marketplace'));
+    if (!mpParsed.success) {
+      return c.json({ error: 'Invalid Marketplace' }, 400);
+    }
+
+    return streamSSE(c, async (stream) => {
+      await orchestrator.retryMarketplace(runId, mpParsed.data, async (evt) => {
+        await stream.writeSSE({
+          event: evt.event,
+          data: JSON.stringify(evt.data),
+        });
+      });
+    });
+  });
+
+  app.post('/api/searches/:runId/stop-facebook', (c) => {
+    const runId = c.req.param('runId');
+    const result = orchestrator.stopFacebookSweep(runId);
+    if (!result.found) {
+      return c.json({ error: 'Search run not found' }, 404);
+    }
+    return c.json({ ok: true, stopped: true, status: result.status });
+  });
+
+  const nowIso = () => new Date(deps.clock ? deps.clock() : Date.now()).toISOString();
+
+  app.get('/api/saved-searches', (c) => {
+    return c.json({ savedSearches: database.savedSearches.list() });
+  });
+
+  app.post('/api/saved-searches', async (c) => {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = CreateSavedSearchInputSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid Saved Search payload', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    const savedSearch = database.savedSearches.create(parsed.data, nowIso());
+    return c.json({ savedSearch }, 201);
+  });
+
+  app.patch('/api/saved-searches/:id', async (c) => {
+    const id = c.req.param('id');
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = UpdateSavedSearchInputSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid Saved Search update payload', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    const updated = database.savedSearches.update(id, parsed.data);
+    if (!updated) {
+      return c.json({ error: 'Saved Search not found' }, 404);
+    }
+
+    return c.json({ savedSearch: updated });
+  });
+
+  app.delete('/api/saved-searches/:id', (c) => {
+    const deleted = database.savedSearches.delete(c.req.param('id'));
+    if (!deleted) {
+      return c.json({ error: 'Saved Search not found' }, 404);
+    }
+    return c.json({ deleted: true });
+  });
+
+  app.post('/api/saved-searches/:id/run', (c) => {
+    const updated = database.savedSearches.recordRun(c.req.param('id'), nowIso());
+    if (!updated) {
+      return c.json({ error: 'Saved Search not found' }, 404);
+    }
+    return c.json({ savedSearch: updated });
+  });
+
+  app.get('/api/watchlist', (c) => {
+    const mpParam = c.req.query('marketplace');
+    const sortParam = c.req.query('sort');
+
+    let marketplace: MarketplaceId | undefined;
+    if (mpParam && mpParam.trim() !== '') {
+      const mpParsed = MarketplaceIdSchema.safeParse(mpParam);
+      if (!mpParsed.success) {
+        return c.json({ error: 'Invalid Marketplace filter' }, 400);
+      }
+      marketplace = mpParsed.data;
+    }
+
+    let sort: WatchlistSortOrder = 'saved_desc';
+    if (sortParam && sortParam.trim() !== '') {
+      const sortParsed = WatchlistSortOrderSchema.safeParse(sortParam);
+      if (!sortParsed.success) {
+        return c.json({ error: 'Invalid Watchlist sort order' }, 400);
+      }
+      sort = sortParsed.data;
+    }
+
+    const entries = database.watchlist.listEntries({ marketplace, sort });
+    return c.json({ entries });
+  });
+
+  app.post('/api/watchlist', async (c) => {
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const parsed = CreateWatchlistEntryRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid Watchlist Entry payload', details: parsed.error.flatten() },
+        400,
+      );
+    }
+
+    const { entry, previousCachedThumbnailPath } = database.watchlist.upsertEntry(
+      parsed.data,
+      nowIso(),
+    );
+    thumbnailCache.cancel(entry.marketplace, entry.marketplaceListingId);
+    if (previousCachedThumbnailPath) {
+      thumbnailCache.deleteFile(previousCachedThumbnailPath);
+    }
+    thumbnailCache.scheduleDownload(entry);
+    return c.json({ entry }, 201);
+  });
+
+  app.delete('/api/watchlist/:marketplace/:listingId', (c) => {
+    const mpParsed = MarketplaceIdSchema.safeParse(c.req.param('marketplace'));
+    if (!mpParsed.success) {
+      return c.json({ error: 'Invalid Marketplace' }, 400);
+    }
+    const listingId = c.req.param('listingId');
+    if (!listingId) {
+      return c.json({ error: 'Listing ID is required' }, 400);
+    }
+
+    thumbnailCache.cancel(mpParsed.data, listingId);
+    const removed = database.watchlist.deleteEntry(mpParsed.data, listingId);
+    if (!removed) {
+      return c.json({ error: 'Watchlist Entry not found' }, 404);
+    }
+    thumbnailCache.deleteFile(removed.cachedThumbnailPath);
+
+    return c.json({
+      deleted: true,
+      marketplace: removed.marketplace,
+      marketplaceListingId: removed.marketplaceListingId,
+    });
+  });
+
+  app.delete('/api/watchlist/:id', (c) => {
+    const id = c.req.param('id');
+    const removed = database.watchlist.deleteEntryById(id);
+    if (!removed) {
+      return c.json({ error: 'Watchlist Entry not found' }, 404);
+    }
+    thumbnailCache.cancel(removed.marketplace, removed.marketplaceListingId);
+    thumbnailCache.deleteFile(removed.cachedThumbnailPath);
+
+    return c.json({
+      deleted: true,
+      marketplace: removed.marketplace,
+      marketplaceListingId: removed.marketplaceListingId,
+    });
+  });
+
+  app.get('/api/thumbnails/:filename', (c) => {
+    const filename = c.req.param('filename');
+    const file = thumbnailCache.readCachedFile(filename);
+    if (!file) {
+      return c.json({ error: 'Thumbnail not found' }, 404);
+    }
+
+    return c.body(new Uint8Array(file.bytes), 200, {
+      'Content-Type': file.contentType,
+      'Cache-Control': 'private, max-age=86400',
+    });
+  });
+
+  app.post('/api/browser/:marketplace/open-session', async (c) => {
+    const mpParsed = BrowserMarketplaceIdSchema.safeParse(c.req.param('marketplace'));
+    if (!mpParsed.success) {
+      return c.json({ error: 'Invalid browser Marketplace' }, 400);
+    }
+
+    let url: string | undefined;
+    try {
+      const body = (await c.req.json()) as { url?: unknown };
+      if (typeof body?.url === 'string' && body.url.trim()) {
+        url = body.url.trim();
+      }
+    } catch {
+      // Optional JSON body
+    }
+
+    try {
+      if (deps.onOpenBrowserSession) {
+        await deps.onOpenBrowserSession(mpParsed.data, url);
+      } else {
+        await browserSessionManager.openForegroundSession(mpParsed.data, url);
+      }
+      orchestrator.clearMarketplaceChallenge(mpParsed.data);
+    } catch (err) {
+      return c.json(
+        {
+          error: err instanceof Error ? err.message : 'Failed to open browser session.',
+          marketplace: mpParsed.data,
+        },
+        400,
+      );
+    }
+
+    return c.json({ ok: true, marketplace: mpParsed.data });
+  });
+
+  app.post('/api/browser/:marketplace/reset-profile', async (c) => {
+    const mpParsed = BrowserMarketplaceIdSchema.safeParse(c.req.param('marketplace'));
+    if (!mpParsed.success) {
+      return c.json({ error: 'Invalid browser Marketplace' }, 400);
+    }
+
+    const marketplace = mpParsed.data;
+    if (deps.onResetBrowserProfile) {
+      await deps.onResetBrowserProfile(marketplace);
+      const profileDir = getProfileDir(dataDir, marketplace);
+      if (fs.existsSync(profileDir)) {
+        fs.rmSync(profileDir, { recursive: true, force: true });
+      }
+    } else {
+      await browserSessionManager.resetProfile(marketplace);
+    }
+    orchestrator.clearMarketplaceChallenge(marketplace);
+
+    return c.json({
+      reset: true,
+      marketplace,
+      ...buildSettingsResponse(),
+    });
+  });
+
+  app.post('/api/system/shutdown', async (c) => {
+    await shutdown();
+    if (deps.onShutdown) {
+      await deps.onShutdown();
+    }
+    return c.json({ ok: true, shuttingDown: true });
+  });
+
+  const staticDir = path.resolve(deps.staticDir ?? path.resolve(process.cwd(), 'dist', 'client'));
+  const indexHtmlPath = path.join(staticDir, 'index.html');
+  if (fs.existsSync(indexHtmlPath)) {
+    const contentTypes: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.mjs': 'application/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.ico': 'image/x-icon',
+    };
+
+    app.get('*', async (c, next) => {
+      if (c.req.path.startsWith('/api/')) {
+        return next();
+      }
+      const relativePath = c.req.path.replace(/^\/+/, '');
+      if (relativePath) {
+        const candidate = path.resolve(staticDir, relativePath);
+        const insideStaticDir =
+          candidate.startsWith(staticDir + path.sep) && fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+        if (insideStaticDir) {
+          const ext = path.extname(candidate).toLowerCase();
+          const mime = contentTypes[ext] ?? 'application/octet-stream';
+          const bytes = fs.readFileSync(candidate);
+          return c.body(bytes, 200, { 'Content-Type': mime });
+        }
+      }
+      const html = fs.readFileSync(indexHtmlPath, 'utf8');
+      return c.html(html);
+    });
+  }
+
+  return {
+    app,
+    db: database.db,
+    database,
+    dataDir,
+    secretsStore,
+    browserSessionManager,
+    registerTeardown,
+    shutdown,
+  };
+}
