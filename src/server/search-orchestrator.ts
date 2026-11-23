@@ -220,7 +220,12 @@ export class SearchOrchestrator {
         if (!mpState) {
           return;
         }
-        const filtered = applyPostFilters(batch.listings, run.unifiedFilters);
+        const normalizedListings = batch.cityHub
+          ? batch.listings.map((item) =>
+              item.hubSlug ? item : { ...item, hubSlug: batch.cityHub },
+            )
+          : batch.listings;
+        const filtered = applyPostFilters(normalizedListings, run.unifiedFilters);
         mpState.status = {
           ...mpState.status,
           loadedCount: mpState.status.loadedCount + filtered.length,
@@ -308,7 +313,8 @@ export class SearchOrchestrator {
     mpState.page = 1;
 
     const finalRunStatus =
-      result.runStatus === 'success' && filteredListings.length === 0 && !streamedIncrementally
+      result.runStatus === 'success' &&
+      (streamedIncrementally ? mpState.status.loadedCount === 0 : filteredListings.length === 0)
         ? 'empty'
         : result.runStatus;
 
@@ -422,7 +428,8 @@ export class SearchOrchestrator {
   }
 
   hasRun(runId: string): boolean {
-    return this.runs.has(runId);
+    const run = this.runs.get(runId);
+    return Boolean(run && !run.abortController.signal.aborted);
   }
 
   async loadMore(
