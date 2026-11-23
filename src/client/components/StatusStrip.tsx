@@ -246,7 +246,7 @@ function StatusCard({
             onClick={() => onRetry(marketplace)}
             className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
           >
-            Retry {label}
+            Query {label}
           </button>
         </div>
       </div>

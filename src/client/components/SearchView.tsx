@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   MARKETPLACE_IDS,
   MARKETPLACE_LABELS,
@@ -19,17 +19,47 @@ import { ListingGrid } from './ListingGrid.tsx';
 import type { FetchLike } from './SettingsView.tsx';
 import { StatusStrip } from './StatusStrip.tsx';
 
+const FORGIVING_SCROLL_ZONE_PX = 450;
+
+function listingKey(listing: Listing): string {
+  return `${listing.marketplace}:${listing.marketplaceListingId}`;
+}
+
+export interface TriggeredSearchRequest {
+  seq: number;
+  keywords: string;
+  unifiedFilters: UnifiedFilter;
+  marketplaces: MarketplaceId[];
+  sortOrder: SortOrder;
+}
+
 export interface SearchViewProps {
   fetchImpl: FetchLike;
   unifiedFilters: UnifiedFilter;
+  keywords: string;
+  onKeywordsChange: (keywords: string) => void;
+  enabledMarketplaces: MarketplaceId[];
+  onEnabledMarketplacesChange: (marketplaces: MarketplaceId[]) => void;
+  sortOrder: SortOrder;
+  onSortOrderChange: (sortOrder: SortOrder) => void;
+  pendingRunRequest: TriggeredSearchRequest | null;
+  watchlistedKeys?: ReadonlySet<string>;
+  onToggleWatchlist?: (listing: Listing) => void;
 }
 
-export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
-  const [keywords, setKeywords] = useState('');
-  const [enabledMarketplaces, setEnabledMarketplaces] = useState<MarketplaceId[]>([
-    ...MARKETPLACE_IDS,
-  ]);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('relevance');
+export function SearchView({
+  fetchImpl,
+  unifiedFilters,
+  keywords,
+  onKeywordsChange,
+  enabledMarketplaces,
+  onEnabledMarketplacesChange,
+  sortOrder,
+  onSortOrderChange,
+  pendingRunRequest,
+  watchlistedKeys,
+  onToggleWatchlist,
+}: SearchViewProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
@@ -40,51 +70,125 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
   const [retryingMarketplace, setRetryingMarketplace] = useState<MarketplaceId | null>(null);
   const [statuses, setStatuses] = useState<Partial<Record<MarketplaceId, MarketplaceStatus>>>({});
   const [listings, setListings] = useState<Listing[]>([]);
+  const [pendingBuffer, setPendingBuffer] = useState<Listing[]>([]);
+  const [newListingKeys, setNewListingKeys] = useState<Set<string>>(() => new Set());
   const [hasMoreByMp, setHasMoreByMp] = useState<Partial<Record<MarketplaceId, boolean>>>({});
+  const [includeKnownShippingInPriceSort, setIncludeKnownShippingInPriceSort] = useState(false);
+  const [visibleMarketplaces, setVisibleMarketplaces] = useState<Record<MarketplaceId, boolean>>({
+    ebay: true,
+    poshmark: true,
+    mercari: true,
+    facebook: true,
+  });
 
   const activeAbortRef = useRef<AbortController | null>(null);
+  const bufferLatchedRef = useRef(false);
+  const listingsRef = useRef<Listing[]>([]);
+  const pendingBufferRef = useRef<Listing[]>([]);
+  const lastTriggeredSeqRef = useRef<number>(0);
+
+  listingsRef.current = listings;
+  pendingBufferRef.current = pendingBuffer;
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (window.scrollY > FORGIVING_SCROLL_ZONE_PX) {
+        bufferLatchedRef.current = true;
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const toggleMarketplace = (mp: MarketplaceId) => {
-    setEnabledMarketplaces((prev) =>
-      prev.includes(mp) ? prev.filter((item) => item !== mp) : [...prev, mp],
-    );
+    const next = enabledMarketplaces.includes(mp)
+      ? enabledMarketplaces.filter((item) => item !== mp)
+      : [...enabledMarketplaces, mp];
+    onEnabledMarketplacesChange(next);
   };
 
-  const validateSearch = (): string | null => {
-    if (!keywords.trim()) {
+  const validateSearch = (params: {
+    keywords: string;
+    unifiedFilters: UnifiedFilter;
+    marketplaces: MarketplaceId[];
+  }): string | null => {
+    if (!params.keywords.trim()) {
       return 'Enter search keywords.';
     }
-    if (enabledMarketplaces.length === 0) {
+    if (params.marketplaces.length === 0) {
       return 'Select at least one Marketplace.';
     }
     if (
-      (unifiedFilters.priceMin != null && unifiedFilters.priceMin < 0) ||
-      (unifiedFilters.priceMax != null && unifiedFilters.priceMax < 0)
+      (params.unifiedFilters.priceMin != null && params.unifiedFilters.priceMin < 0) ||
+      (params.unifiedFilters.priceMax != null && params.unifiedFilters.priceMax < 0)
     ) {
       return 'Prices must be non-negative.';
     }
     if (
-      unifiedFilters.priceMin != null &&
-      unifiedFilters.priceMax != null &&
-      unifiedFilters.priceMin > unifiedFilters.priceMax
+      params.unifiedFilters.priceMin != null &&
+      params.unifiedFilters.priceMax != null &&
+      params.unifiedFilters.priceMin > params.unifiedFilters.priceMax
     ) {
       return 'Minimum price must be less than or equal to maximum price.';
     }
     return null;
   };
 
+  const mergeIntoGrid = (
+    incoming: readonly Listing[],
+    options: { markAsNew?: boolean; replaceMarketplace?: MarketplaceId } = {},
+  ) => {
+    const base = options.replaceMarketplace
+      ? listingsRef.current.filter((item) => item.marketplace !== options.replaceMarketplace)
+      : listingsRef.current;
+    const existingKeys = new Set(base.map(listingKey));
+    const merged = [...base];
+    const addedKeys: string[] = [];
+    for (const item of incoming) {
+      const key = listingKey(item);
+      if (!existingKeys.has(key)) {
+        existingKeys.add(key);
+        merged.push(item);
+        addedKeys.push(key);
+      }
+    }
+    listingsRef.current = merged;
+    setListings(merged);
+
+    if (options.markAsNew && addedKeys.length > 0) {
+      setNewListingKeys((prev) => {
+        const next = new Set(prev);
+        for (const key of addedKeys) {
+          next.add(key);
+        }
+        return next;
+      });
+    }
+  };
+
   const handleSseEvent = (
     event: string,
     data: unknown,
-    replaceMarketplace?: MarketplaceId,
+    options: { replaceMarketplace?: MarketplaceId; bypassBuffer?: boolean; markAsNew?: boolean } = {},
   ) => {
     if (event === 'run_started') {
       const payload = data as SearchRunStartedEvent;
       setSearchRunId(payload.searchRunId);
       setStatuses(payload.statuses);
+      listingsRef.current = [];
+      pendingBufferRef.current = [];
+      bufferLatchedRef.current = false;
       setListings([]);
+      setPendingBuffer([]);
+      setNewListingKeys(new Set());
       setHasMoreByMp({});
       setIsStoppingFacebook(false);
+      setVisibleMarketplaces({
+        ebay: true,
+        poshmark: true,
+        mercari: true,
+        facebook: true,
+      });
       return;
     }
 
@@ -103,22 +207,35 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
         ...prev,
         [payload.marketplace]: payload.hasMore,
       }));
-      setListings((prev) => {
-        const base = replaceMarketplace
-          ? prev.filter((item) => item.marketplace !== replaceMarketplace)
-          : prev;
-        const existingKeys = new Set(
-          base.map((item) => `${item.marketplace}:${item.marketplaceListingId}`),
-        );
-        const merged = [...base];
-        for (const incoming of payload.listings) {
-          const key = `${incoming.marketplace}:${incoming.marketplaceListingId}`;
-          if (!existingKeys.has(key)) {
-            existingKeys.add(key);
-            merged.push(incoming);
-          }
+
+      if (!options.bypassBuffer) {
+        if (window.scrollY > FORGIVING_SCROLL_ZONE_PX) {
+          bufferLatchedRef.current = true;
         }
-        return merged;
+        const shouldBuffer =
+          bufferLatchedRef.current || pendingBufferRef.current.length > 0;
+        if (shouldBuffer) {
+          const knownKeys = new Set([
+            ...listingsRef.current.map(listingKey),
+            ...pendingBufferRef.current.map(listingKey),
+          ]);
+          const appended = [...pendingBufferRef.current];
+          for (const item of payload.listings) {
+            const key = listingKey(item);
+            if (!knownKeys.has(key)) {
+              knownKeys.add(key);
+              appended.push(item);
+            }
+          }
+          pendingBufferRef.current = appended;
+          setPendingBuffer(appended);
+          return;
+        }
+      }
+
+      mergeIntoGrid(payload.listings, {
+        markAsNew: options.markAsNew,
+        replaceMarketplace: options.replaceMarketplace,
       });
       return;
     }
@@ -129,8 +246,29 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
     }
   };
 
-  const runSearch = async (refresh: boolean) => {
-    const err = validateSearch();
+  const handleFlushPendingBuffer = () => {
+    const buffered = pendingBufferRef.current;
+    if (buffered.length === 0) {
+      return;
+    }
+    mergeIntoGrid(buffered, { markAsNew: true });
+    pendingBufferRef.current = [];
+    setPendingBuffer([]);
+    bufferLatchedRef.current = window.scrollY > FORGIVING_SCROLL_ZONE_PX;
+  };
+
+  const runSearch = async (
+    refresh: boolean,
+    override?: Omit<TriggeredSearchRequest, 'seq'>,
+  ) => {
+    const params = override ?? {
+      keywords,
+      unifiedFilters,
+      marketplaces: enabledMarketplaces,
+      sortOrder,
+    };
+
+    const err = validateSearch(params);
     if (err) {
       setValidationError(err);
       return;
@@ -149,10 +287,10 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          keywords: keywords.trim(),
-          unifiedFilters,
-          marketplaces: enabledMarketplaces,
-          sortOrder,
+          keywords: params.keywords.trim(),
+          unifiedFilters: params.unifiedFilters,
+          marketplaces: params.marketplaces,
+          sortOrder: params.sortOrder,
           refresh,
         }),
       });
@@ -177,6 +315,14 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
     }
   };
 
+  useEffect(() => {
+    if (!pendingRunRequest || pendingRunRequest.seq === lastTriggeredSeqRef.current) {
+      return;
+    }
+    lastTriggeredSeqRef.current = pendingRunRequest.seq;
+    void runSearch(false, pendingRunRequest);
+  });
+
   const handleLoadMore = async () => {
     if (!searchRunId || isLoadingMore || isStreaming) {
       return;
@@ -194,7 +340,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
         return;
       }
       await readSseStream(response, ({ event, data }) => {
-        handleSseEvent(event, data);
+        handleSseEvent(event, data, { bypassBuffer: true, markAsNew: true });
       });
     } finally {
       setIsLoadingMore(false);
@@ -207,6 +353,10 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
     }
     setRetryingMarketplace(mp);
     setHasMoreByMp((prev) => ({ ...prev, [mp]: false }));
+    setVisibleMarketplaces((prev) => ({ ...prev, [mp]: true }));
+    if (!enabledMarketplaces.includes(mp)) {
+      onEnabledMarketplacesChange([...enabledMarketplaces, mp]);
+    }
     try {
       const response = await fetchImpl(`/api/searches/${searchRunId}/retry/${mp}`, {
         method: 'POST',
@@ -217,7 +367,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
         return;
       }
       await readSseStream(response, ({ event, data }) => {
-        handleSseEvent(event, data, mp);
+        handleSseEvent(event, data, { replaceMarketplace: mp, bypassBuffer: true });
       });
     } finally {
       setRetryingMarketplace(null);
@@ -249,6 +399,14 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
     }
   };
 
+  const handlePostRunMarketplaceToggle = (mp: MarketplaceId) => {
+    if (statuses[mp]) {
+      setVisibleMarketplaces((prev) => ({ ...prev, [mp]: !prev[mp] }));
+      return;
+    }
+    void handleRetryMarketplace(mp);
+  };
+
   const handleOpenBrowserSession = async (mp: BrowserMarketplaceId, url?: string) => {
     setSessionNotice(null);
     const response = await fetchImpl(`/api/browser/${mp}/open-session`, {
@@ -266,7 +424,20 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
     setSessionNotice(`Opened ${MARKETPLACE_LABELS[mp]} browser session.`);
   };
 
-  const sortedListings = sortListings(listings, sortOrder);
+  const countsByMarketplace: Record<MarketplaceId, number> = {
+    ebay: 0,
+    poshmark: 0,
+    mercari: 0,
+    facebook: 0,
+  };
+  for (const item of listings) {
+    countsByMarketplace[item.marketplace] += 1;
+  }
+
+  const visibleListings = listings.filter((item) => visibleMarketplaces[item.marketplace]);
+  const sortedListings = sortListings(visibleListings, sortOrder, {
+    includeKnownShippingInPriceSort,
+  });
   const hasAnyMore = Object.values(hasMoreByMp).some(Boolean);
 
   return (
@@ -279,7 +450,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
             <select
               aria-label="Sort order"
               value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+              onChange={(e) => onSortOrderChange(e.target.value as SortOrder)}
               className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800"
             >
               <option value="relevance">Relevance</option>
@@ -302,7 +473,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
             aria-label="Search keywords"
             placeholder="Search secondhand Listings (e.g. patagonia nano puff)..."
             value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
+            onChange={(e) => onKeywordsChange(e.target.value)}
             className="min-w-[220px] flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
           />
           <button
@@ -364,7 +535,56 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
             onOpenBrowserSession={(mp, url) => void handleOpenBrowserSession(mp, url)}
           />
 
-          <ListingGrid listings={sortedListings} />
+          <div className="toolbar-bar">
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              role="group"
+              aria-label="Filter visible Marketplaces"
+            >
+              <span className="text-xs font-semibold text-slate-600">Show Marketplaces:</span>
+              {MARKETPLACE_IDS.map((mp) => {
+                const queried = Boolean(statuses[mp]);
+                const pressed = queried && visibleMarketplaces[mp];
+                return (
+                  <button
+                    key={mp}
+                    type="button"
+                    data-vis-mp={mp}
+                    aria-pressed={pressed}
+                    disabled={retryingMarketplace === mp || isStreaming}
+                    title={
+                      queried
+                        ? `Toggle ${MARKETPLACE_LABELS[mp]} visibility`
+                        : `Query ${MARKETPLACE_LABELS[mp]} now`
+                    }
+                    onClick={() => handlePostRunMarketplaceToggle(mp)}
+                    className="toggle-pill"
+                  >
+                    {MARKETPLACE_LABELS[mp]}{' '}
+                    <span className="tabular">
+                      ({queried ? countsByMarketplace[mp] : 'Not queried'})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeKnownShippingInPriceSort}
+                onChange={(e) => setIncludeKnownShippingInPriceSort(e.target.checked)}
+              />
+              <span>Include known shipping in price sort</span>
+            </label>
+          </div>
+
+          <ListingGrid
+            listings={sortedListings}
+            watchlistedKeys={watchlistedKeys}
+            onToggleWatchlist={onToggleWatchlist}
+            newListingKeys={newListingKeys}
+          />
 
           <footer className="panel-box flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-slate-600 tabular">
@@ -385,6 +605,18 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
             </button>
           </footer>
         </>
+      )}
+
+      {pendingBuffer.length > 0 && (
+        <button
+          id="scroll-merge-pill"
+          type="button"
+          className="merge-pill"
+          onClick={handleFlushPendingBuffer}
+        >
+          +{pendingBuffer.length} new {pendingBuffer.length === 1 ? 'Listing' : 'Listings'} — Click
+          to merge
+        </button>
       )}
     </div>
   );
