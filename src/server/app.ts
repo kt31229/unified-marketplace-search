@@ -22,6 +22,7 @@ import {
   type WatchlistSortOrder,
 } from '../shared/index.ts';
 import { createEbayAdapter } from './adapters/ebay.ts';
+import { createMercariAdapter } from './adapters/mercari.ts';
 import { createBrowserPlaceholderAdapter } from './adapters/placeholders.ts';
 import { createPoshmarkAdapter } from './adapters/poshmark.ts';
 import type {
@@ -129,11 +130,15 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     browserSessionManager,
     clock: deps.clock,
   });
+  const defaultMercariAdapter = createMercariAdapter({
+    browserSessionManager,
+    clock: deps.clock,
+  });
 
   const adapters: Record<MarketplaceId, MarketplaceAdapter> = {
     ebay: deps.adapters?.ebay ?? defaultEbayAdapter,
     poshmark: deps.adapters?.poshmark ?? defaultPoshmarkAdapter,
-    mercari: deps.adapters?.mercari ?? createBrowserPlaceholderAdapter('mercari'),
+    mercari: deps.adapters?.mercari ?? defaultMercariAdapter,
     facebook: deps.adapters?.facebook ?? createBrowserPlaceholderAdapter('facebook'),
   };
 

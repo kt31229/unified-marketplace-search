@@ -198,7 +198,7 @@ describe('Search streaming orchestrator & HTTP API', () => {
           priceMin: 20,
           priceMax: 80,
         },
-        marketplaces: ['ebay', 'mercari'],
+        marketplaces: ['ebay', 'facebook'],
         sortOrder: 'relevance',
       }),
     });
@@ -222,7 +222,7 @@ describe('Search streaming orchestrator & HTTP API', () => {
     const statuses = runComplete?.data.statuses as Record<string, { runStatus: string }>;
     expect(statuses.ebay?.runStatus).toBe('success');
     // Unimplemented browser placeholder returns unconfigured cleanly without failing eBay
-    expect(statuses.mercari?.runStatus).toBe('unconfigured');
+    expect(statuses.facebook?.runStatus).toBe('unconfigured');
   });
 
   it('caches successful batches for 60s, enforces post-filters, bypasses cache on refresh/retry, and advances load-more', async () => {
