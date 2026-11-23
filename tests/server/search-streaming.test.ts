@@ -469,4 +469,133 @@ describe('Search streaming orchestrator & HTTP API', () => {
     const res1 = await req1Promise;
     await readSseEvents(res1);
   });
+
+  it('streams incremental onBatch and onProgress during Facebook loadMore without duplicate batches or double-counted loadedCount, and latches challenges', async () => {
+    let loadMoreCall = 0;
+    const fbAdapter: MarketplaceAdapter = {
+      id: 'facebook',
+      translateFilters(keywords) {
+        return {
+          marketplace: 'facebook',
+          status: 'exact',
+          notices: [],
+          nativeSearchUrl: `https://www.facebook.com/marketplace/seattle/search/?query=${encodeURIComponent(keywords)}`,
+        };
+      },
+      async executeInitial() {
+        return {
+          runStatus: 'success',
+          listings: [makeFakeListing('facebook', 'init-1', 40, 1)],
+          droppedMalformedCount: 0,
+          hasMore: true,
+          nextCursor: { page: 1 },
+          completedCities: 2,
+          totalCities: 2,
+          currentCityLabel: null,
+        };
+      },
+      async loadMore({ context }) {
+        loadMoreCall += 1;
+        if (loadMoreCall === 1) {
+          const sea = { ...makeFakeListing('facebook', 'sea-p2', 50, 1), hubSlug: 'seattle' };
+          const la = { ...makeFakeListing('facebook', 'la-p2', 55, 1), hubSlug: 'la' };
+          context.onProgress?.({
+            runStatus: 'running',
+            completedCities: 1,
+            totalCities: 2,
+            currentCityLabel: 'Seattle, WA',
+          });
+          context.onBatch?.({ listings: [sea], cityHub: 'seattle', hasMore: true });
+          context.onProgress?.({
+            runStatus: 'running',
+            completedCities: 2,
+            totalCities: 2,
+            currentCityLabel: 'Los Angeles, CA',
+          });
+          context.onBatch?.({ listings: [la], cityHub: 'la', hasMore: true });
+          return {
+            runStatus: 'success',
+            listings: [sea, la],
+            droppedMalformedCount: 0,
+            hasMore: true,
+            nextCursor: { page: 2 },
+            completedCities: 2,
+            totalCities: 2,
+            currentCityLabel: null,
+          };
+        }
+        return {
+          runStatus: 'challenge_or_auth_required',
+          listings: [],
+          droppedMalformedCount: 0,
+          hasMore: false,
+          errorMessage: 'Checkpoint reached during loadMore',
+        };
+      },
+    };
+
+    const instance = createApp({
+      dataDir: createTempDataDir(),
+      env: {},
+      adapters: { facebook: fbAdapter },
+    });
+    activeApps.push(instance);
+
+    const initRes = await instance.app.request('/api/searches/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keywords: 'jacket',
+        unifiedFilters: createDefaultUnifiedFilter(),
+        marketplaces: ['facebook'],
+        sortOrder: 'relevance',
+      }),
+    });
+    const initEvents = await readSseEvents(initRes);
+    const runId = initEvents.find((e) => e.event === 'run_started')?.data.searchRunId as string;
+
+    const lm1Res = await instance.app.request(`/api/searches/${runId}/load-more`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketplace: 'facebook' }),
+    });
+    expect(lm1Res.status).toBe(200);
+    const lm1Events = await readSseEvents(lm1Res);
+    const lm1Batches = lm1Events.filter((e) => e.event === 'listings_batch');
+    expect(lm1Batches).toHaveLength(2);
+    expect(lm1Batches.map((b) => b.data.cityHub)).toEqual(['seattle', 'la']);
+
+    const lm1RunComplete = lm1Events.find((e) => e.event === 'run_complete');
+    const fbStatus1 = (lm1RunComplete?.data.statuses as Record<string, Record<string, unknown>>)
+      .facebook;
+    expect(fbStatus1?.loadedCount).toBe(3);
+    expect(fbStatus1?.completedCities).toBe(2);
+    expect(fbStatus1?.totalCities).toBe(2);
+    expect(fbStatus1?.currentCityLabel).toBeNull();
+
+    // Second loadMore returns challenge_or_auth_required -> latches facebook for subsequent runs
+    const lm2Res = await instance.app.request(`/api/searches/${runId}/load-more`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketplace: 'facebook' }),
+    });
+    await readSseEvents(lm2Res);
+
+    const latchedRes = await instance.app.request('/api/searches/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keywords: 'jacket 2',
+        unifiedFilters: createDefaultUnifiedFilter(),
+        marketplaces: ['facebook'],
+        sortOrder: 'relevance',
+      }),
+    });
+    const latchedEvents = await readSseEvents(latchedRes);
+    const latchedComplete = latchedEvents.find((e) => e.event === 'run_complete');
+    const fbStatusLatched = (
+      latchedComplete?.data.statuses as Record<string, Record<string, unknown>>
+    ).facebook;
+    expect(fbStatusLatched?.runStatus).toBe('challenge_or_auth_required');
+  });
 });

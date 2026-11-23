@@ -70,7 +70,7 @@ export function SearchView({
   const [isStoppingFacebook, setIsStoppingFacebook] = useState(false);
   const [retryingMarketplace, setRetryingMarketplace] = useState<MarketplaceId | null>(null);
   const [statuses, setStatuses] = useState<Partial<Record<MarketplaceId, MarketplaceStatus>>>({});
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [listingPages, setListingPages] = useState<Listing[][]>(() => [[]]);
   const [pendingBuffer, setPendingBuffer] = useState<Listing[]>([]);
   const [newListingKeys, setNewListingKeys] = useState<Set<string>>(() => new Set());
   const [hasMoreByMp, setHasMoreByMp] = useState<Partial<Record<MarketplaceId, boolean>>>({});
@@ -84,11 +84,11 @@ export function SearchView({
 
   const activeAbortRef = useRef<AbortController | null>(null);
   const bufferLatchedRef = useRef(false);
-  const listingsRef = useRef<Listing[]>([]);
+  const listingPagesRef = useRef<Listing[][]>([[]]);
   const pendingBufferRef = useRef<Listing[]>([]);
   const lastTriggeredSeqRef = useRef<number>(0);
 
-  listingsRef.current = listings;
+  listingPagesRef.current = listingPages;
   pendingBufferRef.current = pendingBuffer;
 
   useEffect(() => {
@@ -110,24 +110,38 @@ export function SearchView({
 
   const mergeIntoGrid = (
     incoming: readonly Listing[],
-    options: { markAsNew?: boolean; replaceMarketplace?: MarketplaceId } = {},
+    options: {
+      markAsNew?: boolean;
+      replaceMarketplace?: MarketplaceId;
+      targetPageIndex?: number;
+    } = {},
   ) => {
-    const base = options.replaceMarketplace
-      ? listingsRef.current.filter((item) => item.marketplace !== options.replaceMarketplace)
-      : listingsRef.current;
-    const existingKeys = new Set(base.map(listingKey));
-    const merged = [...base];
+    const basePages = options.replaceMarketplace
+      ? listingPagesRef.current.map((page) =>
+          page.filter((item) => item.marketplace !== options.replaceMarketplace),
+        )
+      : listingPagesRef.current.map((page) => [...page]);
+    if (basePages.length === 0) {
+      basePages.push([]);
+    }
+
+    const existingKeys = new Set(basePages.flat().map(listingKey));
+    const pageIndex = options.targetPageIndex ?? 0;
+    while (basePages.length <= pageIndex) {
+      basePages.push([]);
+    }
+    const targetPage = basePages[pageIndex]!;
     const addedKeys: string[] = [];
     for (const item of incoming) {
       const key = listingKey(item);
       if (!existingKeys.has(key)) {
         existingKeys.add(key);
-        merged.push(item);
+        targetPage.push(item);
         addedKeys.push(key);
       }
     }
-    listingsRef.current = merged;
-    setListings(merged);
+    listingPagesRef.current = basePages;
+    setListingPages(basePages);
 
     if (options.markAsNew && addedKeys.length > 0) {
       setNewListingKeys((prev) => {
@@ -143,16 +157,21 @@ export function SearchView({
   const handleSseEvent = (
     event: string,
     data: unknown,
-    options: { replaceMarketplace?: MarketplaceId; bypassBuffer?: boolean; markAsNew?: boolean } = {},
+    options: {
+      replaceMarketplace?: MarketplaceId;
+      bypassBuffer?: boolean;
+      markAsNew?: boolean;
+      targetPageIndex?: number;
+    } = {},
   ) => {
     if (event === 'run_started') {
       const payload = data as SearchRunStartedEvent;
       setSearchRunId(payload.searchRunId);
       setStatuses(payload.statuses);
-      listingsRef.current = [];
+      listingPagesRef.current = [[]];
       pendingBufferRef.current = [];
       bufferLatchedRef.current = false;
-      setListings([]);
+      setListingPages([[]]);
       setPendingBuffer([]);
       setNewListingKeys(new Set());
       setHasMoreByMp({});
@@ -190,7 +209,7 @@ export function SearchView({
           bufferLatchedRef.current || pendingBufferRef.current.length > 0;
         if (shouldBuffer) {
           const knownKeys = new Set([
-            ...listingsRef.current.map(listingKey),
+            ...listingPagesRef.current.flat().map(listingKey),
             ...pendingBufferRef.current.map(listingKey),
           ]);
           const appended = [...pendingBufferRef.current];
@@ -210,6 +229,7 @@ export function SearchView({
       mergeIntoGrid(payload.listings, {
         markAsNew: options.markAsNew,
         replaceMarketplace: options.replaceMarketplace,
+        targetPageIndex: options.targetPageIndex,
       });
       return;
     }
@@ -312,6 +332,7 @@ export function SearchView({
     }
     setLoadingMoreTarget(marketplace ?? 'all');
     let receivedBatchForTarget = false;
+    let loadMorePageIndex: number | null = null;
     try {
       const response = await fetchImpl(`/api/searches/${searchRunId}/load-more`, {
         method: 'POST',
@@ -324,14 +345,22 @@ export function SearchView({
         return;
       }
       await readSseStream(response, ({ event, data }) => {
-        if (
-          marketplace &&
-          event === 'listings_batch' &&
-          (data as ListingsBatchEvent).marketplace === marketplace
-        ) {
-          receivedBatchForTarget = true;
+        if (event === 'listings_batch') {
+          if (loadMorePageIndex === null) {
+            loadMorePageIndex = listingPagesRef.current.length;
+          }
+          if (
+            marketplace &&
+            (data as ListingsBatchEvent).marketplace === marketplace
+          ) {
+            receivedBatchForTarget = true;
+          }
         }
-        handleSseEvent(event, data, { bypassBuffer: true, markAsNew: true });
+        handleSseEvent(event, data, {
+          bypassBuffer: true,
+          markAsNew: true,
+          targetPageIndex: loadMorePageIndex ?? undefined,
+        });
       });
       if (marketplace && !receivedBatchForTarget) {
         setHasMoreByMp((prev) => ({ ...prev, [marketplace]: false }));
@@ -418,20 +447,31 @@ export function SearchView({
     setSessionNotice(`Opened ${MARKETPLACE_LABELS[mp]} browser session.`);
   };
 
+  const allListings = listingPages.flat();
   const countsByMarketplace: Record<MarketplaceId, number> = {
     ebay: 0,
     poshmark: 0,
     mercari: 0,
     facebook: 0,
   };
-  for (const item of listings) {
+  for (const item of allListings) {
     countsByMarketplace[item.marketplace] += 1;
   }
 
-  const visibleListings = listings.filter((item) => visibleMarketplaces[item.marketplace]);
-  const sortedListings = sortListings(visibleListings, sortOrder, {
-    includeKnownShippingInPriceSort,
-  });
+  const sortedListings =
+    sortOrder === 'relevance' || sortOrder === 'newest'
+      ? listingPages.flatMap((page) =>
+          sortListings(
+            page.filter((item) => visibleMarketplaces[item.marketplace]),
+            sortOrder,
+            { includeKnownShippingInPriceSort },
+          ),
+        )
+      : sortListings(
+          allListings.filter((item) => visibleMarketplaces[item.marketplace]),
+          sortOrder,
+          { includeKnownShippingInPriceSort },
+        );
   const hasAnyMore = Object.values(hasMoreByMp).some(Boolean);
 
   const handleSortOrderChange = (nextSortOrder: SortOrder) => {

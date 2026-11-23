@@ -477,38 +477,67 @@ export class SearchOrchestrator {
           nextPage,
         );
 
+        let streamedIncrementally = false;
         let result = this.getCached(cacheKey);
         if (!result) {
           const adapter = this.adapters[mp];
-          const context = this.buildExecutionContext(run, mp, emit, settings);
+          const baseContext = this.buildExecutionContext(run, mp, emit, settings);
+          const wrappedContext: AdapterExecutionContext = {
+            ...baseContext,
+            onBatch: (batch) => {
+              streamedIncrementally = true;
+              baseContext.onBatch?.(batch);
+            },
+          };
           result = await adapter.loadMore({
             keywords: run.keywords,
             unifiedFilters: run.unifiedFilters,
             sortOrder: run.sortOrder,
             translation: mpState.translation,
-            context,
+            context: wrappedContext,
             cursor: mpState.cursor,
             page: nextPage,
           });
-          this.setCached(cacheKey, result);
+          const stoppedEarly = mp === 'facebook' && (run.facebookStoppedByUser || Boolean(result.stoppedByUser));
+          if (!run.abortController.signal.aborted && !stoppedEarly) {
+            this.setCached(cacheKey, result);
+          }
+        }
+
+        const stoppedByUser =
+          mp === 'facebook' && (run.facebookStoppedByUser || Boolean(result.stoppedByUser));
+
+        if (mp === 'facebook' && result.runStatus === 'challenge_or_auth_required') {
+          this.latchedChallenges.add('facebook');
         }
 
         const filtered = applyPostFilters(result.listings, run.unifiedFilters);
-        mpState.cursor = result.nextCursor;
-        mpState.hasMore = result.hasMore;
+        mpState.cursor = stoppedByUser ? undefined : result.nextCursor;
+        mpState.hasMore = stoppedByUser ? false : result.hasMore;
         mpState.page = nextPage;
+        const nextLoadedCount = streamedIncrementally
+          ? mpState.status.loadedCount
+          : mpState.status.loadedCount + filtered.length;
         mpState.status = {
           ...mpState.status,
           runStatus:
-            result.runStatus === 'empty' && mpState.status.loadedCount > 0
+            result.runStatus === 'empty' && nextLoadedCount > 0
               ? 'success'
               : result.runStatus,
-          loadedCount: mpState.status.loadedCount + filtered.length,
+          loadedCount: nextLoadedCount,
           droppedMalformedCount: mpState.status.droppedMalformedCount + result.droppedMalformedCount,
           errorMessage: result.errorMessage ?? null,
+          completedCities: result.completedCities ?? mpState.status.completedCities,
+          totalCities: result.totalCities ?? mpState.status.totalCities,
+          currentCityLabel: stoppedByUser
+            ? null
+            : result.currentCityLabel !== undefined
+              ? result.currentCityLabel
+              : mpState.status.currentCityLabel,
+          stoppedByUser: stoppedByUser || result.stoppedByUser,
         };
 
-        if (filtered.length > 0) {
+        if (!streamedIncrementally && filtered.length > 0) {
           await emit({
             event: 'listings_batch',
             data: {
