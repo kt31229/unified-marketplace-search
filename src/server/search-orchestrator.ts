@@ -40,6 +40,8 @@ interface ActiveRunState {
   unifiedFilters: UnifiedFilter;
   sortOrder: SortOrder;
   abortController: AbortController;
+  facebookAbortController: AbortController;
+  facebookStoppedByUser: boolean;
   marketplaces: Map<MarketplaceId, MarketplaceRunState>;
 }
 
@@ -154,6 +156,7 @@ export class SearchOrchestrator {
   private readonly sleep: SleepFn;
   private readonly cache = new Map<string, CacheEntry>();
   private readonly runs = new Map<string, ActiveRunState>();
+  private readonly latchedChallenges = new Set<MarketplaceId>();
   private currentStreamRunId: string | null = null;
 
   constructor(options: SearchOrchestratorOptions) {
@@ -192,10 +195,15 @@ export class SearchOrchestrator {
     emit: SseEmitter,
     settings: AppSettings,
   ): AdapterExecutionContext {
+    const signal =
+      marketplace === 'facebook'
+        ? AbortSignal.any([run.abortController.signal, run.facebookAbortController.signal])
+        : run.abortController.signal;
+
     return {
       settings,
       ebayCredentials: this.secretsStore.getRawCredentials(),
-      signal: run.abortController.signal,
+      signal,
       clock: this.clock,
       sleep: this.sleep,
       onProgress: (update) => {
@@ -269,6 +277,20 @@ export class SearchOrchestrator {
       return;
     }
 
+    if (marketplace === 'facebook' && this.latchedChallenges.has('facebook')) {
+      mpState.status = {
+        ...mpState.status,
+        runStatus: 'challenge_or_auth_required',
+        errorMessage:
+          'Facebook Marketplace is paused after a security checkpoint or login prompt. Click "Open browser session" or "Retry Facebook".',
+      };
+      await emit({
+        event: 'marketplace_status',
+        data: { searchRunId: run.runId, status: mpState.status },
+      });
+      return;
+    }
+
     const adapter = this.adapters[marketplace];
     const settings = this.getSettings();
     const cacheKey = buildCacheKey(
@@ -298,7 +320,8 @@ export class SearchOrchestrator {
         translation: mpState.translation,
         context: wrappedContext,
       });
-      if (!run.abortController.signal.aborted) {
+      const stoppedEarly = marketplace === 'facebook' && run.facebookStoppedByUser;
+      if (!run.abortController.signal.aborted && !stoppedEarly) {
         this.setCached(cacheKey, result);
       }
     }
@@ -307,14 +330,24 @@ export class SearchOrchestrator {
       return;
     }
 
+    const stoppedByUser =
+      marketplace === 'facebook' && (run.facebookStoppedByUser || Boolean(result.stoppedByUser));
+
+    if (marketplace === 'facebook' && result.runStatus === 'challenge_or_auth_required') {
+      this.latchedChallenges.add('facebook');
+    }
+
     const filteredListings: Listing[] = applyPostFilters(result.listings, run.unifiedFilters);
-    mpState.cursor = result.nextCursor;
-    mpState.hasMore = result.hasMore;
+    mpState.cursor = stoppedByUser ? undefined : result.nextCursor;
+    mpState.hasMore = stoppedByUser ? false : result.hasMore;
     mpState.page = 1;
 
-    const finalRunStatus =
-      result.runStatus === 'success' &&
-      (streamedIncrementally ? mpState.status.loadedCount === 0 : filteredListings.length === 0)
+    const finalRunStatus = stoppedByUser
+      ? (streamedIncrementally ? mpState.status.loadedCount > 0 : filteredListings.length > 0)
+        ? 'success'
+        : 'empty'
+      : result.runStatus === 'success' &&
+          (streamedIncrementally ? mpState.status.loadedCount === 0 : filteredListings.length === 0)
         ? 'empty'
         : result.runStatus;
 
@@ -328,8 +361,8 @@ export class SearchOrchestrator {
       errorMessage: result.errorMessage ?? null,
       completedCities: result.completedCities,
       totalCities: result.totalCities,
-      currentCityLabel: result.currentCityLabel,
-      stoppedByUser: result.stoppedByUser,
+      currentCityLabel: stoppedByUser ? null : result.currentCityLabel,
+      stoppedByUser: stoppedByUser || result.stoppedByUser,
     };
 
     if (!streamedIncrementally && filteredListings.length > 0) {
@@ -363,6 +396,7 @@ export class SearchOrchestrator {
     this.currentStreamRunId = runId;
 
     const abortController = new AbortController();
+    const facebookAbortController = new AbortController();
     const settings = this.getSettings();
     const uniqueMarketplaces = Array.from(new Set(request.marketplaces));
 
@@ -372,6 +406,8 @@ export class SearchOrchestrator {
       unifiedFilters: request.unifiedFilters,
       sortOrder: request.sortOrder,
       abortController,
+      facebookAbortController,
+      facebookStoppedByUser: false,
       marketplaces: new Map(),
     };
     this.runs.set(runId, run);
@@ -531,6 +567,40 @@ export class SearchOrchestrator {
     return true;
   }
 
+  clearMarketplaceChallenge(marketplace: MarketplaceId): void {
+    this.latchedChallenges.delete(marketplace);
+    this.adapters[marketplace]?.clearChallengeLatch?.();
+  }
+
+  stopFacebookSweep(runId: string): { found: boolean; status: MarketplaceStatus | null } {
+    const run = this.runs.get(runId);
+    if (!run) {
+      return { found: false, status: null };
+    }
+    run.facebookStoppedByUser = true;
+    run.facebookAbortController.abort(new Error('Facebook sweep stopped by user'));
+    const fbState = run.marketplaces.get('facebook');
+    if (fbState) {
+      fbState.hasMore = false;
+      fbState.cursor = undefined;
+      if (fbState.status.runStatus === 'running') {
+        fbState.status = {
+          ...fbState.status,
+          runStatus: fbState.status.loadedCount > 0 ? 'success' : 'empty',
+          currentCityLabel: null,
+          stoppedByUser: true,
+        };
+      } else {
+        fbState.status = {
+          ...fbState.status,
+          stoppedByUser: true,
+        };
+      }
+      return { found: true, status: fbState.status };
+    }
+    return { found: true, status: null };
+  }
+
   async retryMarketplace(
     runId: string,
     marketplace: MarketplaceId,
@@ -539,6 +609,12 @@ export class SearchOrchestrator {
     const run = this.runs.get(runId);
     if (!run) {
       return false;
+    }
+
+    this.clearMarketplaceChallenge(marketplace);
+    if (marketplace === 'facebook') {
+      run.facebookAbortController = new AbortController();
+      run.facebookStoppedByUser = false;
     }
 
     const settings = this.getSettings();

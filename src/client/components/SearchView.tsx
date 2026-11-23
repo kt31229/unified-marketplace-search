@@ -66,6 +66,7 @@ export function SearchView({
   const [searchRunId, setSearchRunId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isStoppingFacebook, setIsStoppingFacebook] = useState(false);
   const [retryingMarketplace, setRetryingMarketplace] = useState<MarketplaceId | null>(null);
   const [statuses, setStatuses] = useState<Partial<Record<MarketplaceId, MarketplaceStatus>>>({});
   const [listings, setListings] = useState<Listing[]>([]);
@@ -181,6 +182,7 @@ export function SearchView({
       setPendingBuffer([]);
       setNewListingKeys(new Set());
       setHasMoreByMp({});
+      setIsStoppingFacebook(false);
       setVisibleMarketplaces({
         ebay: true,
         poshmark: true,
@@ -372,6 +374,31 @@ export function SearchView({
     }
   };
 
+  const handleStopFacebook = async () => {
+    if (!searchRunId || isStoppingFacebook) {
+      return;
+    }
+    setIsStoppingFacebook(true);
+    try {
+      const response = await fetchImpl(`/api/searches/${searchRunId}/stop-facebook`, {
+        method: 'POST',
+      });
+      if (response.ok) {
+        const json = (await response.json().catch(() => null)) as {
+          status?: MarketplaceStatus | null;
+        } | null;
+        if (json?.status) {
+          setStatuses((prev) => ({
+            ...prev,
+            facebook: json.status!,
+          }));
+        }
+      }
+    } finally {
+      setIsStoppingFacebook(false);
+    }
+  };
+
   const handlePostRunMarketplaceToggle = (mp: MarketplaceId) => {
     if (statuses[mp]) {
       setVisibleMarketplaces((prev) => ({ ...prev, [mp]: !prev[mp] }));
@@ -502,7 +529,9 @@ export function SearchView({
           <StatusStrip
             statuses={statuses}
             retryingMarketplace={retryingMarketplace}
+            isStoppingFacebook={isStoppingFacebook}
             onRetry={(mp) => void handleRetryMarketplace(mp)}
+            onStopFacebook={() => void handleStopFacebook()}
             onOpenBrowserSession={(mp, url) => void handleOpenBrowserSession(mp, url)}
           />
 

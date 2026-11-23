@@ -36,12 +36,18 @@ export interface BrowserCookie {
   path?: string;
 }
 
+export interface BrowserRequestHandle {
+  method?(): string;
+  postData?(): string | null;
+}
+
 export interface BrowserResponseHandle {
   url(): string;
   status(): number;
   json(): Promise<unknown>;
   text?(): Promise<string>;
   headers?(): Record<string, string>;
+  request?(): BrowserRequestHandle;
 }
 
 export interface BrowserPageHandle {

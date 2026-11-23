@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, type AppInstance } from '../../src/server/app.ts';
+import { createBrowserPlaceholderAdapter } from '../../src/server/adapters/placeholders.ts';
 import type { MarketplaceAdapter } from '../../src/server/adapters/types.ts';
 import {
   createDefaultUnifiedFilter,
@@ -181,6 +182,9 @@ describe('Search streaming orchestrator & HTTP API', () => {
         EBAY_CLIENT_SECRET: 'ebay-secret',
       },
       fetchImpl: fetchMock,
+      adapters: {
+        facebook: createBrowserPlaceholderAdapter('facebook'),
+      },
     });
     activeApps.push(instance);
 
