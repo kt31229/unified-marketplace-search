@@ -136,6 +136,9 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
       if (url === '/api/settings') {
         return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
       }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
+      }
 
       if (url === '/api/searches/stream') {
         streamCallCount += 1;
@@ -315,6 +318,9 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
 
       if (url === '/api/settings') {
         return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
       }
 
       if (url === '/api/searches/stream') {

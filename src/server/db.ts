@@ -5,6 +5,7 @@ import {
   createDefaultAppSettings,
   type AppSettings,
 } from '../shared/index.ts';
+import { SavedSearchesRepository } from './saved-searches-repo.ts';
 
 interface Migration {
   version: number;
@@ -60,6 +61,24 @@ const MIGRATIONS: Migration[] = [
         facebookCityHubsJson: JSON.stringify(defaults.facebookCityHubs),
         updatedAt: new Date().toISOString(),
       });
+    },
+  },
+  {
+    version: 2,
+    apply: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saved_searches (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          keywords TEXT NOT NULL,
+          unified_filters_json TEXT NOT NULL,
+          marketplaces_json TEXT NOT NULL,
+          sort_order TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          last_run_at TEXT,
+          display_order INTEGER NOT NULL
+        );
+      `);
     },
   },
 ];
@@ -148,6 +167,7 @@ export class SettingsRepository {
 export interface AppDatabase {
   db: DatabaseSync;
   settings: SettingsRepository;
+  savedSearches: SavedSearchesRepository;
   getUserVersion: () => number;
   close: () => void;
 }
@@ -186,6 +206,7 @@ export function openDatabase(dataDir: string): AppDatabase {
   return {
     db,
     settings: new SettingsRepository(db),
+    savedSearches: new SavedSearchesRepository(db),
     getUserVersion: () => {
       const row = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
       return row?.user_version ?? 0;

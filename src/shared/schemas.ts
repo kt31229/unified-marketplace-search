@@ -161,6 +161,66 @@ export const SavedSearchSchema = z.object({
 
 export type SavedSearch = z.infer<typeof SavedSearchSchema>;
 
+export const CreateSavedSearchInputSchema = z.object({
+  name: z.string().trim().min(1, 'Saved Search name is required'),
+  keywords: z.string().trim().min(1, 'Enter search keywords'),
+  unifiedFilters: UnifiedFilterSchema,
+  marketplaces: z.array(MarketplaceIdSchema).min(1, 'Select at least one Marketplace'),
+  sortOrder: SortOrderSchema.default('relevance'),
+});
+
+export type CreateSavedSearchInput = z.infer<typeof CreateSavedSearchInputSchema>;
+
+export const UpdateSavedSearchInputSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Saved Search name is required').optional(),
+    keywords: z.string().trim().min(1, 'Enter search keywords').optional(),
+    unifiedFilters: UnifiedFilterSchema.optional(),
+    marketplaces: z
+      .array(MarketplaceIdSchema)
+      .min(1, 'Select at least one Marketplace')
+      .optional(),
+    sortOrder: SortOrderSchema.optional(),
+  })
+  .refine(
+    (input) =>
+      input.name !== undefined ||
+      input.keywords !== undefined ||
+      input.unifiedFilters !== undefined ||
+      input.marketplaces !== undefined ||
+      input.sortOrder !== undefined,
+    { message: 'Provide at least one field to update' },
+  );
+
+export type UpdateSavedSearchInput = z.infer<typeof UpdateSavedSearchInputSchema>;
+
+export function suggestSavedSearchName(
+  keywords: string,
+  unifiedFilters?: UnifiedFilter,
+): string {
+  const base = keywords.trim() || 'Saved Search';
+  if (!unifiedFilters) {
+    return base;
+  }
+
+  const parts: string[] = [];
+  if (unifiedFilters.priceMin != null && unifiedFilters.priceMax != null) {
+    parts.push(`$${unifiedFilters.priceMin}–$${unifiedFilters.priceMax}`);
+  } else if (unifiedFilters.priceMin != null) {
+    parts.push(`$${unifiedFilters.priceMin}+`);
+  } else if (unifiedFilters.priceMax != null) {
+    parts.push(`≤$${unifiedFilters.priceMax}`);
+  }
+
+  if (unifiedFilters.fulfillment === 'local_pickup') {
+    parts.push('Local Pickup');
+  } else if (unifiedFilters.fulfillment === 'shipping') {
+    parts.push('Shipping');
+  }
+
+  return parts.length > 0 ? `${base} (${parts.join(' · ')})` : base;
+}
+
 export const WatchlistEntrySchema = z.object({
   marketplace: MarketplaceIdSchema,
   marketplaceListingId: z.string().min(1),
