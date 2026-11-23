@@ -11,6 +11,7 @@ import {
 } from '../../shared/index.ts';
 import type { BrowserPageHandle, BrowserSessionManager } from '../browser-session-manager.ts';
 import { applyPostFilters } from './post-filter.ts';
+import { createTimeoutRace, isTimeoutError } from './utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -283,62 +284,6 @@ function isChallengeText(url: string, title: string, html?: string): boolean {
     }
   }
   return false;
-}
-
-function isTimeoutError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') {
-    return false;
-  }
-  if ('isTimeout' in err && (err as { isTimeout?: boolean }).isTimeout) {
-    return true;
-  }
-  if (err instanceof Error) {
-    return (
-      err.name === 'TimeoutError' ||
-      /timeout/i.test(err.message) ||
-      /timed out/i.test(err.message)
-    );
-  }
-  return false;
-}
-
-function createTimeoutRace<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-    const timer = setTimeout(() => {
-      reject(
-        Object.assign(new Error(`Poshmark request timed out after ${timeoutMs}ms`), {
-          isTimeout: true,
-        }),
-      );
-    }, timeoutMs);
-
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    promise.then(
-      (val) => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
-        resolve(val);
-      },
-      (err) => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
-        reject(err);
-      },
-    );
-  });
 }
 
 async function runInPageVmRestFetch(
@@ -729,6 +674,7 @@ export class PoshmarkAdapter implements MarketplaceAdapter {
         ),
         this.timeoutMs,
         context.signal,
+        'Poshmark',
       );
     } catch (err) {
       if (context.signal?.aborted) {

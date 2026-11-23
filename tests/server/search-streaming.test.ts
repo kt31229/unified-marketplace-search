@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, type AppInstance } from '../../src/server/app.ts';
-import { createBrowserPlaceholderAdapter } from '../../src/server/adapters/placeholders.ts';
 import type { MarketplaceAdapter } from '../../src/server/adapters/types.ts';
 import {
   createDefaultUnifiedFilter,
@@ -63,6 +62,37 @@ async function readSseEvents(response: Response): Promise<ParsedSseEvent[]> {
     }
   }
   return events;
+}
+
+function createUnconfiguredAdapter(marketplace: MarketplaceId): MarketplaceAdapter {
+  return {
+    id: marketplace,
+    translateFilters(keywords) {
+      return {
+        marketplace,
+        status: 'exact',
+        notices: [],
+        nativeSearchUrl: `https://example.com/${marketplace}?q=${encodeURIComponent(keywords.trim())}`,
+      };
+    },
+    async executeInitial() {
+      return {
+        runStatus: 'unconfigured',
+        listings: [],
+        droppedMalformedCount: 0,
+        hasMore: false,
+        errorMessage: `${marketplace} is not configured in this test.`,
+      };
+    },
+    async loadMore() {
+      return {
+        runStatus: 'empty',
+        listings: [],
+        droppedMalformedCount: 0,
+        hasMore: false,
+      };
+    },
+  };
 }
 
 function makeFakeListing(
@@ -183,7 +213,7 @@ describe('Search streaming orchestrator & HTTP API', () => {
       },
       fetchImpl: fetchMock,
       adapters: {
-        facebook: createBrowserPlaceholderAdapter('facebook'),
+        facebook: createUnconfiguredAdapter('facebook'),
       },
     });
     activeApps.push(instance);

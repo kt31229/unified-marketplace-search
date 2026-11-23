@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { runServerEntrypoint } from '../../src/server/index.ts';
 import { launchApp } from '../../src/server/launcher.ts';
+import type { RunningServer } from '../../src/server/server.ts';
 
 describe('launchApp', () => {
   it('opens the existing URL and does not spawn a duplicate server when /api/health reports UMS is already running', async () => {
@@ -74,7 +76,11 @@ describe('launchApp', () => {
     });
     expect(probePortOpen).toHaveBeenCalledWith('127.0.0.1', 4999);
     expect(spawnServer).toHaveBeenCalledTimes(1);
-    expect(spawnServer).toHaveBeenCalledWith('C:/repo/dist/server/index.js', { UMS_PORT: '4999' });
+    expect(spawnServer).toHaveBeenCalledWith(
+      'C:/repo/dist/server/index.js',
+      { UMS_PORT: '4999' },
+      ['--no-open'],
+    );
     expect(unrefSpy).toHaveBeenCalledTimes(1);
     expect(openUrl).toHaveBeenCalledTimes(1);
     expect(openUrl).toHaveBeenCalledWith('http://127.0.0.1:4999');
@@ -158,6 +164,112 @@ describe('launchApp', () => {
       }),
     ).rejects.toThrow(/timed out/i);
 
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('runServerEntrypoint (npm start)', () => {
+  function createStubRunningServer(port: number): RunningServer {
+    return {
+      server: {} as RunningServer['server'],
+      appInstance: {
+        dataDir: 'C:/tmp/ums-data',
+      } as RunningServer['appInstance'],
+      port,
+      url: `http://127.0.0.1:${port}`,
+      stop: vi.fn(async () => {}),
+    };
+  }
+
+  it('probes /api/health, opens the URL, and skips starting a second server when UMS is already running', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('http://127.0.0.1:4173/api/health');
+      return new Response(JSON.stringify({ ok: true, bindHost: '127.0.0.1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    const startServerImpl = vi.fn();
+    const openUrl = vi.fn(async () => {});
+    const log = vi.fn();
+
+    const result = await runServerEntrypoint({
+      argv: [],
+      env: {},
+      fetchImpl,
+      startServerImpl,
+      openUrl,
+      log,
+    });
+
+    expect(result).toEqual({
+      action: 'opened_existing',
+      port: 4173,
+      url: 'http://127.0.0.1:4173',
+      openedBrowser: true,
+    });
+    expect(startServerImpl).not.toHaveBeenCalled();
+    expect(openUrl).toHaveBeenCalledTimes(1);
+    expect(openUrl).toHaveBeenCalledWith('http://127.0.0.1:4173');
+  });
+
+  it('starts the server in the foreground and auto-opens the default browser when not already running', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    const stubRunning = createStubRunningServer(4321);
+    const startServerImpl = vi.fn(async () => stubRunning);
+    const openUrl = vi.fn(async () => {});
+    const log = vi.fn();
+
+    const result = await runServerEntrypoint({
+      argv: [],
+      env: { UMS_PORT: '4321' },
+      fetchImpl,
+      startServerImpl,
+      openUrl,
+      log,
+    });
+
+    expect(result.action).toBe('started');
+    expect(result.port).toBe(4321);
+    expect(result.url).toBe('http://127.0.0.1:4321');
+    expect(result.openedBrowser).toBe(true);
+    expect(startServerImpl).toHaveBeenCalledTimes(1);
+    expect(openUrl).toHaveBeenCalledTimes(1);
+    expect(openUrl).toHaveBeenCalledWith('http://127.0.0.1:4321');
+  });
+
+  it('suppresses auto-open when --no-open or UMS_NO_OPEN=1 is passed', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    const startServerImpl = vi.fn(async () => createStubRunningServer(4173));
+    const openUrl = vi.fn(async () => {});
+    const log = vi.fn();
+
+    const flagRes = await runServerEntrypoint({
+      argv: ['--no-open'],
+      env: {},
+      fetchImpl,
+      startServerImpl,
+      openUrl,
+      log,
+    });
+    expect(flagRes.action).toBe('started');
+    expect(flagRes.openedBrowser).toBe(false);
+    expect(openUrl).not.toHaveBeenCalled();
+
+    const envRes = await runServerEntrypoint({
+      argv: [],
+      env: { UMS_NO_OPEN: '1' },
+      fetchImpl,
+      startServerImpl,
+      openUrl,
+      log,
+    });
+    expect(envRes.action).toBe('started');
+    expect(envRes.openedBrowser).toBe(false);
     expect(openUrl).not.toHaveBeenCalled();
   });
 });

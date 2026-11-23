@@ -75,9 +75,13 @@ function formatStatusBadge(status: MarketplaceStatus): {
 interface StatusCardProps {
   marketplace: MarketplaceId;
   status: MarketplaceStatus | undefined;
+  hasMore: boolean;
   isRetrying: boolean;
+  isLoadingMore: boolean;
+  isLoadingThisMarketplace: boolean;
   isStoppingFacebook?: boolean;
   onRetry: (marketplace: MarketplaceId) => void;
+  onLoadMore?: (marketplace: MarketplaceId) => void;
   onStopFacebook?: () => void;
   onOpenBrowserSession: (marketplace: BrowserMarketplaceId, url?: string) => void;
 }
@@ -85,9 +89,13 @@ interface StatusCardProps {
 function StatusCard({
   marketplace,
   status,
+  hasMore,
   isRetrying,
+  isLoadingMore,
+  isLoadingThisMarketplace,
   isStoppingFacebook,
   onRetry,
+  onLoadMore,
   onStopFacebook,
   onOpenBrowserSession,
 }: StatusCardProps) {
@@ -366,6 +374,21 @@ function StatusCard({
         >
           Retry {label}
         </button>
+        {hasMore &&
+          status.runStatus !== 'running' &&
+          !isRetrying &&
+          !isLoadingThisMarketplace &&
+          onLoadMore && (
+            <button
+              type="button"
+              disabled={isLoadingMore}
+              onClick={() => onLoadMore(marketplace)}
+              aria-label={`Load more ${label}`}
+              className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+            >
+              Load more
+            </button>
+          )}
         {isBrowserMarketplace(marketplace) && (
           <button
             type="button"
@@ -411,18 +434,24 @@ function StatusCard({
 
 export interface StatusStripProps {
   statuses: Partial<Record<MarketplaceId, MarketplaceStatus>>;
+  hasMoreByMp?: Partial<Record<MarketplaceId, boolean>>;
   retryingMarketplace: MarketplaceId | null;
+  loadingMoreTarget?: MarketplaceId | 'all' | null;
   isStoppingFacebook?: boolean;
   onRetry: (marketplace: MarketplaceId) => void;
+  onLoadMoreMarketplace?: (marketplace: MarketplaceId) => void;
   onStopFacebook?: () => void;
   onOpenBrowserSession: (marketplace: BrowserMarketplaceId, url?: string) => void;
 }
 
 export function StatusStrip({
   statuses,
+  hasMoreByMp,
   retryingMarketplace,
+  loadingMoreTarget = null,
   isStoppingFacebook,
   onRetry,
+  onLoadMoreMarketplace,
   onStopFacebook,
   onOpenBrowserSession,
 }: StatusStripProps) {
@@ -433,9 +462,13 @@ export function StatusStrip({
           key={mp}
           marketplace={mp}
           status={statuses[mp]}
+          hasMore={Boolean(hasMoreByMp?.[mp])}
           isRetrying={retryingMarketplace === mp}
+          isLoadingMore={loadingMoreTarget !== null}
+          isLoadingThisMarketplace={loadingMoreTarget === mp || loadingMoreTarget === 'all'}
           isStoppingFacebook={mp === 'facebook' ? isStoppingFacebook : false}
           onRetry={onRetry}
+          onLoadMore={onLoadMoreMarketplace}
           onStopFacebook={mp === 'facebook' ? onStopFacebook : undefined}
           onOpenBrowserSession={onOpenBrowserSession}
         />

@@ -521,4 +521,290 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
       'eBay Base 40 Ship 15',
     ]);
   });
+
+  it('initiates a new search run when primary SortOrder changes after an active run, without running before the first search', async () => {
+    const streamBodies: Array<Record<string, unknown>> = [];
+    let runSeq = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
+      }
+      if (url === '/api/searches/stream') {
+        runSeq += 1;
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+        streamBodies.push(body);
+        const runId = `run-sort-${runSeq}`;
+        return createSseResponse([
+          {
+            event: 'run_started',
+            data: {
+              searchRunId: runId,
+              diagnostics: makeDiagnostics(['ebay']),
+              statuses: makeStatuses(['ebay']),
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: runId,
+              marketplace: 'ebay',
+              listings: [
+                makeListing('ebay', `e-${runSeq}`, {
+                  title: `Sorted Listing ${String(body.sortOrder)}`,
+                }),
+              ],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: runId,
+              statuses: makeStatuses(['ebay']),
+            },
+          },
+        ]);
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    const main = screen.getByRole('main');
+
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'jacket');
+    // Changing SortOrder before any search run updates draft only (no stream call)
+    await userEvent.selectOptions(screen.getByLabelText(/Sort order/i), 'newest');
+    expect(streamBodies).toHaveLength(0);
+
+    // Run initial search
+    await userEvent.click(within(main).getByRole('button', { name: /^Search$/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Sorted Listing newest')).toBeInTheDocument();
+    });
+    expect(streamBodies).toHaveLength(1);
+    expect(streamBodies[0]?.sortOrder).toBe('newest');
+
+    // Changing SortOrder after a run is active initiates a fresh search run with updated sortOrder
+    await userEvent.selectOptions(screen.getByLabelText(/Sort order/i), 'price_desc');
+    await waitFor(() => {
+      expect(screen.getByText('Sorted Listing price_desc')).toBeInTheDocument();
+    });
+    expect(streamBodies).toHaveLength(2);
+    expect(streamBodies[1]?.sortOrder).toBe('price_desc');
+    expect(streamBodies[1]?.keywords).toBe('jacket');
+    expect(streamBodies[1]?.refresh).toBe(false);
+  });
+
+  it('allows toggling visibility of an already-queried Marketplace while another Marketplace is still streaming', async () => {
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const calls: string[] = [];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push(url);
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
+      }
+      if (url === '/api/searches/stream') {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller;
+            controller.enqueue(
+              encodeSseEvent('run_started', {
+                searchRunId: 'run-mid-stream',
+                diagnostics: makeDiagnostics(['ebay', 'facebook']),
+                statuses: makeStatuses(['ebay', 'facebook'], {
+                  ebay: { runStatus: 'running', loadedCount: 0 },
+                  facebook: {
+                    runStatus: 'running',
+                    loadedCount: 0,
+                    completedCities: 1,
+                    totalCities: 4,
+                    currentCityLabel: 'Seattle, WA',
+                  },
+                }),
+              }),
+            );
+            controller.enqueue(
+              encodeSseEvent('listings_batch', {
+                searchRunId: 'run-mid-stream',
+                marketplace: 'ebay',
+                listings: [makeListing('ebay', 'e-live', { title: 'Live eBay Jacket' })],
+                hasMore: false,
+              }),
+            );
+            controller.enqueue(
+              encodeSseEvent('marketplace_status', {
+                searchRunId: 'run-mid-stream',
+                status: makeStatuses(['ebay'], {
+                  ebay: { runStatus: 'success', loadedCount: 1 },
+                }).ebay,
+              }),
+            );
+            // Leave stream open so Facebook is still sweeping (isStreaming === true)
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    const main = screen.getByRole('main');
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'jacket');
+    await userEvent.click(within(main).getByRole('button', { name: /^Search$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Live eBay Jacket')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Searching\.\.\./i })).toBeDisabled();
+    });
+
+    const callsBeforeToggle = calls.length;
+    const filterGroup = screen.getByRole('group', { name: /Filter visible Marketplaces/i });
+    const ebayVisBtn = within(filterGroup).getByRole('button', { name: /^eBay/i });
+    expect(ebayVisBtn).toBeEnabled();
+    expect(ebayVisBtn).toHaveAttribute('aria-pressed', 'true');
+
+    // Toggle eBay off mid-stream -> hides eBay Listing immediately with 0 network calls
+    await userEvent.click(ebayVisBtn);
+    expect(ebayVisBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText('Live eBay Jacket')).not.toBeInTheDocument();
+    expect(calls.length).toBe(callsBeforeToggle);
+
+    // Toggle eBay back on mid-stream -> restores eBay Listing immediately
+    await userEvent.click(ebayVisBtn);
+    expect(ebayVisBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Live eBay Jacket')).toBeInTheDocument();
+    expect(calls.length).toBe(callsBeforeToggle);
+
+    // Cleanly close stream
+    await act(async () => {
+      streamController?.enqueue(
+        encodeSseEvent('run_complete', {
+          searchRunId: 'run-mid-stream',
+          statuses: makeStatuses(['ebay', 'facebook']),
+        }),
+      );
+      streamController?.close();
+    });
+  });
+
+  it('renders a per-Marketplace Load more button on status cards with hasMore and sends { marketplace } to load-more', async () => {
+    const loadMoreBodies: Array<Record<string, unknown>> = [];
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
+      }
+      if (url === '/api/searches/stream') {
+        return createSseResponse([
+          {
+            event: 'run_started',
+            data: {
+              searchRunId: 'run-per-mp-1',
+              diagnostics: makeDiagnostics(['ebay', 'poshmark']),
+              statuses: makeStatuses(['ebay', 'poshmark'], {
+                ebay: { runStatus: 'running', loadedCount: 0 },
+                poshmark: { runStatus: 'running', loadedCount: 0 },
+              }),
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-per-mp-1',
+              marketplace: 'ebay',
+              listings: [makeListing('ebay', 'e-p1', { title: 'eBay Page 1 Coat' })],
+              hasMore: true,
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-per-mp-1',
+              marketplace: 'poshmark',
+              listings: [makeListing('poshmark', 'p-p1', { title: 'Poshmark Page 1 Vest' })],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-per-mp-1',
+              statuses: makeStatuses(['ebay', 'poshmark']),
+            },
+          },
+        ]);
+      }
+      if (url === '/api/searches/run-per-mp-1/load-more') {
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+        loadMoreBodies.push(body);
+        return createSseResponse([
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-per-mp-1',
+              marketplace: 'ebay',
+              listings: [makeListing('ebay', 'e-p2', { title: 'eBay Page 2 Parka', adapterRank: 2 })],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-per-mp-1',
+              statuses: makeStatuses(['ebay', 'poshmark'], {
+                ebay: { loadedCount: 2 },
+                poshmark: { loadedCount: 1 },
+              }),
+            },
+          },
+        ]);
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    const main = screen.getByRole('main');
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
+    await userEvent.click(within(main).getByRole('button', { name: /^Search$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('eBay Page 1 Coat')).toBeInTheDocument();
+      expect(screen.getByText('Poshmark Page 1 Vest')).toBeInTheDocument();
+    });
+
+    const ebayCard = screen.getByTestId('status-card-ebay');
+    const poshCard = screen.getByTestId('status-card-poshmark');
+
+    // eBay hasMore === true -> shows per-Marketplace Load more button; Poshmark hasMore === false -> does not
+    const ebayLoadMoreBtn = within(ebayCard).getByRole('button', { name: /Load more/i });
+    expect(ebayLoadMoreBtn).toBeEnabled();
+    expect(within(poshCard).queryByRole('button', { name: /Load more/i })).not.toBeInTheDocument();
+
+    await userEvent.click(ebayLoadMoreBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('eBay Page 2 Parka')).toBeInTheDocument();
+    });
+    expect(loadMoreBodies).toEqual([{ marketplace: 'ebay' }]);
+    const page2Card = screen.getByText('eBay Page 2 Parka').closest('article')!;
+    expect(within(page2Card).getByText('New')).toHaveClass('new-badge');
+    expect(within(ebayCard).queryByRole('button', { name: /Load more/i })).not.toBeInTheDocument();
+  });
 });

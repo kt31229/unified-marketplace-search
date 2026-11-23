@@ -151,7 +151,7 @@ export function WatchlistView({ entries, loading, onRemove }: WatchlistViewProps
       ) : visibleEntries.length === 0 ? (
         <div className="panel-box text-sm text-slate-600">
           {entries.length === 0
-            ? 'No Watchlist Entries saved yet. Save any Listing from Search results to track it here.'
+            ? 'No Watchlist Entries saved yet. Save any Listing from Search to track it here.'
             : 'No Watchlist Entries match the selected Marketplace filter.'}
         </div>
       ) : (

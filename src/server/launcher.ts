@@ -17,7 +17,11 @@ export interface LaunchAppOptions {
   serverEntryPath?: string;
   fetchImpl?: FetchLike;
   probePortOpen?: (host: string, port: number) => Promise<boolean>;
-  spawnServer?: (serverEntryPath: string, env: NodeJS.ProcessEnv) => SpawnedServerHandle;
+  spawnServer?: (
+    serverEntryPath: string,
+    env: NodeJS.ProcessEnv,
+    args?: string[],
+  ) => SpawnedServerHandle;
   openUrl?: (url: string) => Promise<void> | void;
   sleep?: (ms: number) => Promise<void>;
   clock?: () => number;
@@ -36,7 +40,7 @@ export function buildLocalUrl(port: number): string {
   return `http://${BIND_HOST}:${port}`;
 }
 
-async function checkUmsHealth(
+export async function checkUmsHealth(
   url: string,
   fetchImpl: FetchLike,
   timeoutMs: number,
@@ -110,8 +114,9 @@ export async function defaultOpenUrl(
 function defaultSpawnServer(
   serverEntryPath: string,
   env: NodeJS.ProcessEnv,
+  args: string[] = ['--no-open'],
 ): SpawnedServerHandle {
-  const child = spawn(process.execPath, [serverEntryPath], {
+  const child = spawn(process.execPath, [serverEntryPath, ...args], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
@@ -171,7 +176,7 @@ export async function launchApp(options: LaunchAppOptions = {}): Promise<LaunchA
   const serverEntryPath =
     options.serverEntryPath ?? path.resolve(process.cwd(), 'dist', 'server', 'index.js');
 
-  const child = spawnServer(serverEntryPath, env);
+  const child = spawnServer(serverEntryPath, env, ['--no-open']);
   let earlyExitCode: number | null | undefined;
   void child.exitedEarly?.then((code) => {
     earlyExitCode = code;

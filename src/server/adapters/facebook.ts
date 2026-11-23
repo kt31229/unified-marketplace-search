@@ -19,6 +19,7 @@ import type {
   BrowserSessionManager,
 } from '../browser-session-manager.ts';
 import { applyPostFilters } from './post-filter.ts';
+import { createTimeoutRace, defaultSleep, isTimeoutError } from './utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -140,27 +141,6 @@ export interface FacebookAdapterOptions {
   random?: () => number;
 }
 
-function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (ms <= 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
-}
-
 function buildConditionCodes(conditions: readonly ConditionTier[]): {
   codes: string[];
   broadenedPoor: boolean;
@@ -256,62 +236,6 @@ export function buildFacebookSearchUrl(
 
   url.searchParams.set('sortBy', FACEBOOK_SORT_MAP[sortOrder]);
   return url.toString();
-}
-
-function createTimeoutRace<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-    const timer = setTimeout(() => {
-      reject(
-        Object.assign(new Error(`Facebook Marketplace request timed out after ${timeoutMs}ms`), {
-          isTimeout: true,
-        }),
-      );
-    }, timeoutMs);
-
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    promise.then(
-      (val) => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
-        resolve(val);
-      },
-      (err) => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
-        reject(err);
-      },
-    );
-  });
-}
-
-function isTimeoutError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') {
-    return false;
-  }
-  if ('isTimeout' in err && (err as { isTimeout?: boolean }).isTimeout) {
-    return true;
-  }
-  if (err instanceof Error) {
-    return (
-      err.name === 'TimeoutError' ||
-      /timeout/i.test(err.message) ||
-      /timed out/i.test(err.message)
-    );
-  }
-  return false;
 }
 
 function isChallengeUrlOrDom(url: string, title: string, html: string): boolean {
@@ -890,6 +814,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
         ),
         this.timeoutMs,
         signal,
+        'Facebook Marketplace',
       );
     } catch (err) {
       if (signal?.aborted) {
@@ -1305,6 +1230,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
         ),
         this.timeoutMs,
         params.context.signal,
+        'Facebook Marketplace',
       );
     } catch (err) {
       if (params.context.signal?.aborted) {

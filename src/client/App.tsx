@@ -4,6 +4,7 @@ import {
   MARKETPLACE_IDS,
   createDefaultUnifiedFilter,
   suggestSavedSearchName,
+  validateSearchDraft,
   type FacebookCityHub,
   type Listing,
   type MarketplaceId,
@@ -88,33 +89,6 @@ function isSavedSearchDirty(
     return true;
   }
   return false;
-}
-
-function validateSearchDraft(
-  keywords: string,
-  marketplaces: readonly MarketplaceId[],
-  unifiedFilters: UnifiedFilter,
-): string | null {
-  if (!keywords.trim()) {
-    return 'Enter search keywords before saving.';
-  }
-  if (marketplaces.length === 0) {
-    return 'Select at least one Marketplace before saving.';
-  }
-  if (
-    (unifiedFilters.priceMin != null && unifiedFilters.priceMin < 0) ||
-    (unifiedFilters.priceMax != null && unifiedFilters.priceMax < 0)
-  ) {
-    return 'Prices must be non-negative.';
-  }
-  if (
-    unifiedFilters.priceMin != null &&
-    unifiedFilters.priceMax != null &&
-    unifiedFilters.priceMin > unifiedFilters.priceMax
-  ) {
-    return 'Minimum price must be less than or equal to maximum price.';
-  }
-  return null;
 }
 
 export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
@@ -332,7 +306,11 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
   );
 
   const handleOpenSaveDialog = () => {
-    const err = validateSearchDraft(keywords, enabledMarketplaces, unifiedFilters);
+    const err = validateSearchDraft({
+      keywords,
+      marketplaces: enabledMarketplaces,
+      unifiedFilters,
+    });
     if (err) {
       setSavedSearchError(err);
       return;
@@ -409,7 +387,11 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
     if (!activeSavedSearch) {
       return;
     }
-    const err = validateSearchDraft(keywords, enabledMarketplaces, unifiedFilters);
+    const err = validateSearchDraft({
+      keywords,
+      marketplaces: enabledMarketplaces,
+      unifiedFilters,
+    });
     if (err) {
       setSavedSearchError(err);
       return;
