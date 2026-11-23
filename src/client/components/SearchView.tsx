@@ -3,6 +3,7 @@ import {
   MARKETPLACE_IDS,
   MARKETPLACE_LABELS,
   sortListings,
+  validateSearchDraft,
   type BrowserMarketplaceId,
   type Listing,
   type ListingsBatchEvent,
@@ -65,7 +66,7 @@ export function SearchView({
 
   const [searchRunId, setSearchRunId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadingMoreTarget, setLoadingMoreTarget] = useState<MarketplaceId | 'all' | null>(null);
   const [isStoppingFacebook, setIsStoppingFacebook] = useState(false);
   const [retryingMarketplace, setRetryingMarketplace] = useState<MarketplaceId | null>(null);
   const [statuses, setStatuses] = useState<Partial<Record<MarketplaceId, MarketplaceStatus>>>({});
@@ -105,33 +106,6 @@ export function SearchView({
       ? enabledMarketplaces.filter((item) => item !== mp)
       : [...enabledMarketplaces, mp];
     onEnabledMarketplacesChange(next);
-  };
-
-  const validateSearch = (params: {
-    keywords: string;
-    unifiedFilters: UnifiedFilter;
-    marketplaces: MarketplaceId[];
-  }): string | null => {
-    if (!params.keywords.trim()) {
-      return 'Enter search keywords.';
-    }
-    if (params.marketplaces.length === 0) {
-      return 'Select at least one Marketplace.';
-    }
-    if (
-      (params.unifiedFilters.priceMin != null && params.unifiedFilters.priceMin < 0) ||
-      (params.unifiedFilters.priceMax != null && params.unifiedFilters.priceMax < 0)
-    ) {
-      return 'Prices must be non-negative.';
-    }
-    if (
-      params.unifiedFilters.priceMin != null &&
-      params.unifiedFilters.priceMax != null &&
-      params.unifiedFilters.priceMin > params.unifiedFilters.priceMax
-    ) {
-      return 'Minimum price must be less than or equal to maximum price.';
-    }
-    return null;
   };
 
   const mergeIntoGrid = (
@@ -268,7 +242,7 @@ export function SearchView({
       sortOrder,
     };
 
-    const err = validateSearch(params);
+    const err = validateSearchDraft(params);
     if (err) {
       setValidationError(err);
       return;
@@ -323,16 +297,26 @@ export function SearchView({
     void runSearch(false, pendingRunRequest);
   });
 
-  const handleLoadMore = async () => {
-    if (!searchRunId || isLoadingMore || isStreaming) {
+  const isLoadingMore = loadingMoreTarget !== null;
+
+  const handleLoadMore = async (marketplace?: MarketplaceId) => {
+    if (!searchRunId || loadingMoreTarget !== null) {
       return;
     }
-    setIsLoadingMore(true);
+    if (marketplace) {
+      if (statuses[marketplace]?.runStatus === 'running') {
+        return;
+      }
+    } else if (isStreaming) {
+      return;
+    }
+    setLoadingMoreTarget(marketplace ?? 'all');
+    let receivedBatchForTarget = false;
     try {
       const response = await fetchImpl(`/api/searches/${searchRunId}/load-more`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(marketplace ? { marketplace } : {}),
       });
       if (!response.ok) {
         const errJson = (await response.json().catch(() => ({}))) as { error?: string };
@@ -340,10 +324,20 @@ export function SearchView({
         return;
       }
       await readSseStream(response, ({ event, data }) => {
+        if (
+          marketplace &&
+          event === 'listings_batch' &&
+          (data as ListingsBatchEvent).marketplace === marketplace
+        ) {
+          receivedBatchForTarget = true;
+        }
         handleSseEvent(event, data, { bypassBuffer: true, markAsNew: true });
       });
+      if (marketplace && !receivedBatchForTarget) {
+        setHasMoreByMp((prev) => ({ ...prev, [marketplace]: false }));
+      }
     } finally {
-      setIsLoadingMore(false);
+      setLoadingMoreTarget(null);
     }
   };
 
@@ -440,6 +434,18 @@ export function SearchView({
   });
   const hasAnyMore = Object.values(hasMoreByMp).some(Boolean);
 
+  const handleSortOrderChange = (nextSortOrder: SortOrder) => {
+    onSortOrderChange(nextSortOrder);
+    if (searchRunId !== null && keywords.trim().length > 0 && enabledMarketplaces.length > 0) {
+      void runSearch(false, {
+        keywords,
+        unifiedFilters,
+        marketplaces: enabledMarketplaces,
+        sortOrder: nextSortOrder,
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3.5">
       <section className="panel-box flex flex-col gap-3">
@@ -450,7 +456,7 @@ export function SearchView({
             <select
               aria-label="Sort order"
               value={sortOrder}
-              onChange={(e) => onSortOrderChange(e.target.value as SortOrder)}
+              onChange={(e) => handleSortOrderChange(e.target.value as SortOrder)}
               className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800"
             >
               <option value="relevance">Relevance</option>
@@ -528,9 +534,12 @@ export function SearchView({
         <>
           <StatusStrip
             statuses={statuses}
+            hasMoreByMp={hasMoreByMp}
             retryingMarketplace={retryingMarketplace}
+            loadingMoreTarget={loadingMoreTarget}
             isStoppingFacebook={isStoppingFacebook}
             onRetry={(mp) => void handleRetryMarketplace(mp)}
+            onLoadMoreMarketplace={(mp) => void handleLoadMore(mp)}
             onStopFacebook={() => void handleStopFacebook()}
             onOpenBrowserSession={(mp, url) => void handleOpenBrowserSession(mp, url)}
           />
@@ -551,7 +560,7 @@ export function SearchView({
                     type="button"
                     data-vis-mp={mp}
                     aria-pressed={pressed}
-                    disabled={retryingMarketplace === mp || isStreaming}
+                    disabled={retryingMarketplace === mp || (!queried && !searchRunId)}
                     title={
                       queried
                         ? `Toggle ${MARKETPLACE_LABELS[mp]} visibility`

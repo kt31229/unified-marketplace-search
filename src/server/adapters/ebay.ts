@@ -320,7 +320,7 @@ export class EbayAdapter implements MarketplaceAdapter {
         minStr && maxStr
           ? `[${minStr}..${maxStr}]`
           : minStr
-            ? `[${minStr}]`
+            ? `[${minStr}..]`
             : `[..${maxStr}]`;
       filterClauses.push(`price:${rangeExpr},priceCurrency:USD`);
     }

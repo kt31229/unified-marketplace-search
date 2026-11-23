@@ -13,6 +13,7 @@ import {
 } from '../shared/index.ts';
 import type { SecretsStore } from './secrets.ts';
 import { applyPostFilters } from './adapters/post-filter.ts';
+import { defaultSleep } from './adapters/utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -56,30 +57,6 @@ export interface SearchOrchestratorOptions {
   secretsStore: SecretsStore;
   clock?: ClockFn;
   sleep?: SleepFn;
-}
-
-function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (ms <= 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new DOMException('Aborted', 'AbortError'));
-    };
-    if (signal) {
-      if (signal.aborted) {
-        clearTimeout(timer);
-        reject(new DOMException('Aborted', 'AbortError'));
-        return;
-      }
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-  });
 }
 
 function buildCacheKey(

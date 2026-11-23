@@ -8,12 +8,11 @@ import {
 } from './schemas.ts';
 
 export interface SortListingsOptions {
-  includeKnownShipping?: boolean;
   includeKnownShippingInPriceSort?: boolean;
 }
 
-function getEffectivePrice(listing: Listing, includeKnownShipping: boolean): number {
-  if (!includeKnownShipping) {
+function getEffectivePrice(listing: Listing, includeKnownShippingInPriceSort: boolean): number {
+  if (!includeKnownShippingInPriceSort) {
     return listing.price;
   }
   return listing.price + (listing.shippingPrice ?? 0);
@@ -81,8 +80,7 @@ export function sortListings(
   sortOrder: SortOrder,
   options: SortListingsOptions = {},
 ): Listing[] {
-  const includeKnownShipping =
-    options.includeKnownShippingInPriceSort ?? options.includeKnownShipping ?? false;
+  const includeKnownShippingInPriceSort = options.includeKnownShippingInPriceSort ?? false;
 
   if (sortOrder === 'relevance') {
     const buckets = new Map<MarketplaceId, Listing[]>();
@@ -129,7 +127,8 @@ export function sortListings(
   const direction = sortOrder === 'price_asc' ? 1 : -1;
   copy.sort((a, b) => {
     const primaryDiff =
-      (getEffectivePrice(a, includeKnownShipping) - getEffectivePrice(b, includeKnownShipping)) *
+      (getEffectivePrice(a, includeKnownShippingInPriceSort) -
+        getEffectivePrice(b, includeKnownShippingInPriceSort)) *
       direction;
     if (primaryDiff !== 0) {
       return primaryDiff;

@@ -53,7 +53,7 @@ describe('eBay Buy Browse API adapter — filter translation', () => {
       { settings },
     );
     expect((openMin.nativeQuery as { filter: string; sort?: string }).filter).toContain(
-      'price:[10.00],priceCurrency:USD',
+      'price:[10.00..],priceCurrency:USD',
     );
     expect((openMin.nativeQuery as { sort?: string }).sort).toBe('-price');
 
