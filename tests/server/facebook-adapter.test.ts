@@ -79,7 +79,10 @@ interface FacebookMockStep {
 interface ScriptedFacebookOptions {
   cookies?: BrowserCookie[];
   stepsByUrl?: (url: string, callIndex: number) => FacebookMockStep | Promise<FacebookMockStep>;
-  onScrollLoadMore?: (callIndex: number) => Promise<{
+  onScrollLoadMore?: (
+    callIndex: number,
+    currentUrl: string,
+  ) => Promise<{
     url?: string;
     status?: number;
     postData?: string;
@@ -90,73 +93,84 @@ interface ScriptedFacebookOptions {
 function createScriptedFacebookTransport(options: ScriptedFacebookOptions) {
   const gotoUrls: string[] = [];
   const evaluateCalls: number[] = [];
-  let currentUrl = 'about:blank';
-  let currentStep: FacebookMockStep = { html: '<html></html>' };
+  const pages: BrowserPageHandle[] = [];
   let launchCount = 0;
   let scrollCallIndex = 0;
-  let pendingWaiter: ((res: BrowserResponseHandle) => void) | null = null;
 
   const transport: BrowserTransport = {
     async launchPersistentContext(): Promise<BrowserContextHandle> {
       launchCount += 1;
-      const page: BrowserPageHandle = {
-        async goto(url: string) {
-          const idx = gotoUrls.length;
-          gotoUrls.push(url);
-          if (options.stepsByUrl) {
-            currentStep = await options.stepsByUrl(url, idx);
-          }
-          currentUrl = currentStep.finalUrl ?? url;
-          return {
-            url: () => currentUrl,
-            status: () => currentStep.status ?? 200,
-            json: async () => ({}),
-          };
-        },
-        url: () => currentUrl,
-        title: async () => currentStep.title ?? 'Marketplace Search',
-        content: async () => currentStep.html,
-        async evaluate<R>(): Promise<R> {
-          evaluateCalls.push(scrollCallIndex);
-          if (options.onScrollLoadMore) {
-            const payload = await options.onScrollLoadMore(scrollCallIndex);
-            scrollCallIndex += 1;
-            const resHandle: BrowserResponseHandle = {
-              url: () => payload.url ?? 'https://www.facebook.com/api/graphql/',
-              status: () => payload.status ?? 200,
-              json: async () => payload.body,
-              request: () => ({
-                method: () => 'POST',
-                postData: () =>
-                  payload.postData ??
-                  'fb_api_req_friendly_name=CometMarketplaceSearchContentPaginationQuery&variables=%7B%7D',
-              }),
+      const makePage = (): BrowserPageHandle => {
+        let currentUrl = 'about:blank';
+        let currentStep: FacebookMockStep = { html: '<html></html>' };
+        let closed = false;
+        let pendingWaiter: ((res: BrowserResponseHandle) => void) | null = null;
+
+        const page: BrowserPageHandle = {
+          async goto(url: string) {
+            const idx = gotoUrls.length;
+            gotoUrls.push(url);
+            if (options.stepsByUrl) {
+              currentStep = await options.stepsByUrl(url, idx);
+            }
+            currentUrl = currentStep.finalUrl ?? url;
+            return {
+              url: () => currentUrl,
+              status: () => currentStep.status ?? 200,
+              json: async () => ({}),
             };
-            pendingWaiter?.(resHandle);
-            pendingWaiter = null;
-          }
-          return undefined as R;
-        },
-        waitForResponse: async (predicate) => {
-          return new Promise<BrowserResponseHandle>((resolve) => {
-            pendingWaiter = async (res) => {
-              const matched =
-                typeof predicate === 'string'
-                  ? res.url().includes(predicate)
-                  : await predicate(res);
-              if (matched) {
-                resolve(res);
-              }
-            };
-          });
-        },
-        close: async () => undefined,
-        isClosed: () => false,
+          },
+          url: () => currentUrl,
+          title: async () => currentStep.title ?? 'Marketplace Search',
+          content: async () => currentStep.html,
+          async evaluate<R>(): Promise<R> {
+            evaluateCalls.push(scrollCallIndex);
+            if (options.onScrollLoadMore) {
+              const payload = await options.onScrollLoadMore(scrollCallIndex, currentUrl);
+              scrollCallIndex += 1;
+              const resHandle: BrowserResponseHandle = {
+                url: () => payload.url ?? 'https://www.facebook.com/api/graphql/',
+                status: () => payload.status ?? 200,
+                json: async () => payload.body,
+                request: () => ({
+                  method: () => 'POST',
+                  postData: () =>
+                    payload.postData ??
+                    'fb_api_req_friendly_name=CometMarketplaceSearchContentPaginationQuery&variables=%7B%7D',
+                }),
+              };
+              pendingWaiter?.(resHandle);
+              pendingWaiter = null;
+            }
+            return undefined as R;
+          },
+          waitForResponse: async (predicate) => {
+            return new Promise<BrowserResponseHandle>((resolve) => {
+              pendingWaiter = async (res) => {
+                const matched =
+                  typeof predicate === 'string'
+                    ? res.url().includes(predicate)
+                    : await predicate(res);
+                if (matched) {
+                  resolve(res);
+                }
+              };
+            });
+          },
+          close: async () => {
+            closed = true;
+          },
+          isClosed: () => closed,
+        };
+        pages.push(page);
+        return page;
       };
 
+      const initialPage = makePage();
+
       return {
-        pages: () => [page],
-        newPage: async () => page,
+        pages: () => pages.filter((p) => !p.isClosed?.()),
+        newPage: async () => makePage(),
         cookies: async () =>
           options.cookies ?? [{ name: 'c_user', value: '10000123456', domain: '.facebook.com' }],
         close: async () => undefined,
@@ -170,6 +184,7 @@ function createScriptedFacebookTransport(options: ScriptedFacebookOptions) {
     gotoUrls,
     evaluateCalls,
     getLaunchCount: () => launchCount,
+    getPageCount: () => pages.length,
   };
 }
 
@@ -862,5 +877,499 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     expect(guestOnly.gotoUrls).toHaveLength(1);
     expect(adapter.isChallengeLatched()).toBe(true);
     await bsm.shutdown();
+  });
+
+  it('ignores checkpoint/two_step_verification strings inside embedded <script> or <style> blocks when Relay feed_units are present', async () => {
+    const relayHtml = wrapRelayHtml({
+      marketplace_search: {
+        feed_units: {
+          edges: [
+            {
+              node: {
+                listing: {
+                  id: 'fb-script-meta-1',
+                  marketplace_listing_title: 'Patagonia Torrentshell',
+                  listing_price: { amount: '65.00', currency: 'USD' },
+                  is_sold: false,
+                  is_pending: false,
+                  delivery_types: ['SHIPPING_ONSITE'],
+                  creation_time: 1732233600,
+                },
+              },
+            },
+          ],
+          page_info: { end_cursor: null, has_next_page: false },
+        },
+      },
+    });
+    const htmlWithScriptMeta = relayHtml.replace(
+      '</body>',
+      '<style>/* /checkpoint/ */</style><script type="application/json">{"29818881.two_step_verification.pre_authentication":11,"routes":["/checkpoint/"]}</script></body>',
+    );
+
+    const scripted = createScriptedFacebookTransport({
+      stepsByUrl: () => ({
+        title: 'Facebook',
+        html: htmlWithScriptMeta,
+      }),
+    });
+    const bsm = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: scripted.transport,
+    });
+    const adapter = createFacebookAdapter({ browserSessionManager: bsm });
+    const filters = {
+      ...createDefaultUnifiedFilter(),
+      fulfillment: 'shipping' as const,
+    };
+    const translation = adapter.translateFilters('patagonia', filters, 'relevance', makeContext());
+
+    const result = await adapter.executeInitial({
+      keywords: 'patagonia',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: makeContext(),
+    });
+
+    expect(result.runStatus).toBe('success');
+    expect(result.listings.map((l) => l.marketplaceListingId)).toEqual(['fb-script-meta-1']);
+    expect(adapter.isChallengeLatched()).toBe(false);
+    await bsm.shutdown();
+  });
+
+  it('paginates all designated city hubs with next pages on loadMore using dedicated warm per-hub tabs, 3-5s cooldowns, dedup, and interleaving', async () => {
+    const scrollUrls: string[] = [];
+    const scripted = createScriptedFacebookTransport({
+      stepsByUrl: (url) => {
+        const hubSlug = url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
+        const hasNext = hubSlug !== 'sanfrancisco';
+        return {
+          html: wrapRelayHtml({
+            marketplace_search: {
+              feed_units: {
+                edges: [
+                  {
+                    node: {
+                      listing: {
+                        id: `${hubSlug}-p1`,
+                        marketplace_listing_title: `${hubSlug} Page 1`,
+                        listing_price: { amount: '50.00' },
+                        is_sold: false,
+                        is_pending: false,
+                        delivery_types: ['IN_PERSON'],
+                        creation_time: 1732233600,
+                      },
+                    },
+                  },
+                ],
+                page_info: {
+                  end_cursor: hasNext ? `${hubSlug}-c1` : null,
+                  has_next_page: hasNext,
+                },
+              },
+            },
+          }),
+        };
+      },
+      onScrollLoadMore: async (_callIndex, currentUrl) => {
+        scrollUrls.push(currentUrl);
+        const hubSlug = currentUrl.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
+        const isThirdPage = scrollUrls.filter((u) => u === currentUrl).length >= 2;
+        const pageNum = isThirdPage ? 3 : 2;
+        const edges: unknown[] = [
+          {
+            node: {
+              listing: {
+                id: `${hubSlug}-p${pageNum}`,
+                marketplace_listing_title: `${hubSlug} Page ${pageNum}`,
+                listing_price: { amount: '60.00' },
+                is_sold: false,
+                is_pending: false,
+                delivery_types: ['IN_PERSON'],
+                creation_time: 1732233600,
+              },
+            },
+          },
+        ];
+        if (!isThirdPage) {
+          edges.push({
+            node: {
+              listing: {
+                id: 'shared-p2-dup',
+                marketplace_listing_title: 'Shared Page 2 Dup',
+                listing_price: { amount: '70.00' },
+                is_sold: false,
+                is_pending: false,
+                delivery_types: ['IN_PERSON'],
+                creation_time: 1732233600,
+              },
+            },
+          });
+        }
+        return {
+          body: {
+            data: {
+              marketplace_search: {
+                feed_units: {
+                  edges,
+                  page_info: {
+                    end_cursor: isThirdPage ? null : `${hubSlug}-c2`,
+                    has_next_page: !isThirdPage,
+                  },
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+
+    const sleepCalls: number[] = [];
+    const progressUpdates: Array<{
+      completedCities?: number;
+      totalCities?: number;
+      currentCityLabel?: string | null;
+    }> = [];
+    const streamedBatches: Array<{ cityHub?: string; ids: string[] }> = [];
+
+    const bsm = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: scripted.transport,
+    });
+    const adapter = createFacebookAdapter({
+      browserSessionManager: bsm,
+      sleep: async (ms) => {
+        sleepCalls.push(ms);
+      },
+      random: () => 0.5,
+    });
+
+    const filters = {
+      ...createDefaultUnifiedFilter(),
+      facebookLocationSlugs: ['seattle', 'sanfrancisco', 'la'],
+    };
+    const translation = adapter.translateFilters('bike', filters, 'relevance', makeContext());
+
+    const page1 = await adapter.executeInitial({
+      keywords: 'bike',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: makeContext(),
+    });
+
+    expect(scripted.getPageCount()).toBe(3);
+    expect(scripted.gotoUrls).toHaveLength(3);
+    expect(page1.hasMore).toBe(true);
+
+    sleepCalls.length = 0;
+
+    // Page 2: sweeps seattle and la (skips exhausted sanfrancisco) with 0 extra gotos
+    const page2 = await adapter.loadMore({
+      keywords: 'bike',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: makeContext({
+        onProgress: (u) => {
+          progressUpdates.push({
+            completedCities: u.completedCities,
+            totalCities: u.totalCities,
+            currentCityLabel: u.currentCityLabel,
+          });
+        },
+        onBatch: (b) => {
+          streamedBatches.push({
+            cityHub: b.cityHub,
+            ids: b.listings.map((l) => l.marketplaceListingId),
+          });
+        },
+      }),
+      cursor: page1.nextCursor,
+      page: 2,
+    });
+
+    expect(scripted.gotoUrls).toHaveLength(3);
+    expect(scrollUrls.map((u) => u.match(/\/marketplace\/([^/]+)\/search\//)?.[1])).toEqual([
+      'seattle',
+      'la',
+    ]);
+    expect(sleepCalls).toHaveLength(1);
+    expect(sleepCalls[0]).toBeGreaterThanOrEqual(3000);
+    expect(sleepCalls[0]).toBeLessThanOrEqual(5000);
+    expect(progressUpdates.map((p) => `${p.completedCities}/${p.totalCities}`)).toEqual(['1/2', '2/2']);
+    expect(streamedBatches).toEqual([
+      { cityHub: 'seattle', ids: ['seattle-p2', 'shared-p2-dup'] },
+      { cityHub: 'la', ids: ['la-p2'] },
+    ]);
+    expect(page2.runStatus).toBe('success');
+    expect(page2.hasMore).toBe(true);
+    expect(page2.completedCities).toBe(2);
+    expect(page2.totalCities).toBe(2);
+    // Round-robin interleaved: seattle-p2, la-p2, shared-p2-dup
+    expect(page2.listings.map((l) => l.marketplaceListingId)).toEqual([
+      'seattle-p2',
+      'la-p2',
+      'shared-p2-dup',
+    ]);
+
+    // Page 3: continues on warm per-hub tabs with 0 extra gotos and exhausts hasMore
+    const page3 = await adapter.loadMore({
+      keywords: 'bike',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: makeContext(),
+      cursor: page2.nextCursor,
+      page: 3,
+    });
+
+    expect(scripted.gotoUrls).toHaveLength(3);
+    expect(page3.runStatus).toBe('success');
+    expect(page3.hasMore).toBe(false);
+    expect(page3.listings.map((l) => l.marketplaceListingId)).toEqual(['seattle-p3', 'la-p3']);
+
+    await bsm.shutdown();
+  });
+
+  it('handles mid-sweep circuit breaker, non-challenge per-hub fault isolation, and user abort during loadMore', async () => {
+    const makeInitialStep = (hubSlug: string): FacebookMockStep => ({
+      html: wrapRelayHtml({
+        marketplace_search: {
+          feed_units: {
+            edges: [
+              {
+                node: {
+                  listing: {
+                    id: `${hubSlug}-init`,
+                    marketplace_listing_title: `${hubSlug} Init`,
+                    listing_price: { amount: '40.00' },
+                    is_sold: false,
+                    is_pending: false,
+                    delivery_types: ['IN_PERSON'],
+                  },
+                },
+              },
+            ],
+            page_info: { end_cursor: `${hubSlug}-c1`, has_next_page: true },
+          },
+        },
+      }),
+    });
+
+    // 1. Mid-sweep challenge on hub 2 of 3 aborts immediately and retains hub 1 listings
+    const scrolledChallenge: string[] = [];
+    const challengeTransport = createScriptedFacebookTransport({
+      stepsByUrl: (url) => makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
+      onScrollLoadMore: async (_idx, currentUrl) => {
+        const hubSlug = currentUrl.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
+        scrolledChallenge.push(hubSlug);
+        if (hubSlug === 'sanfrancisco') {
+          return { status: 403, body: {} };
+        }
+        return {
+          body: {
+            data: {
+              marketplace_search: {
+                feed_units: {
+                  edges: [
+                    {
+                      node: {
+                        listing: {
+                          id: `${hubSlug}-p2`,
+                          marketplace_listing_title: `${hubSlug} Page 2`,
+                          listing_price: { amount: '55.00' },
+                          is_sold: false,
+                          is_pending: false,
+                          delivery_types: ['IN_PERSON'],
+                        },
+                      },
+                    },
+                  ],
+                  page_info: { end_cursor: null, has_next_page: false },
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+    const bsm1 = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: challengeTransport.transport,
+    });
+    const adapter1 = createFacebookAdapter({
+      browserSessionManager: bsm1,
+      sleep: async () => undefined,
+    });
+    const filters3 = {
+      ...createDefaultUnifiedFilter(),
+      facebookLocationSlugs: ['seattle', 'sanfrancisco', 'la'],
+    };
+    const t1 = adapter1.translateFilters('camera', filters3, 'relevance', makeContext());
+    const init1 = await adapter1.executeInitial({
+      keywords: 'camera',
+      unifiedFilters: filters3,
+      sortOrder: 'relevance',
+      translation: t1,
+      context: makeContext(),
+    });
+    const lmChallenge = await adapter1.loadMore({
+      keywords: 'camera',
+      unifiedFilters: filters3,
+      sortOrder: 'relevance',
+      translation: t1,
+      context: makeContext(),
+      cursor: init1.nextCursor,
+      page: 2,
+    });
+    expect(scrolledChallenge).toEqual(['seattle', 'sanfrancisco']);
+    expect(lmChallenge.runStatus).toBe('challenge_or_auth_required');
+    expect(lmChallenge.listings.map((l) => l.marketplaceListingId)).toEqual(['seattle-p2']);
+    expect(adapter1.isChallengeLatched()).toBe(true);
+    await bsm1.shutdown();
+
+    // 2. Non-challenge parse_error on hub 1 of 2 continues to hub 2
+    const faultTransport = createScriptedFacebookTransport({
+      stepsByUrl: (url) => makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
+      onScrollLoadMore: async (_idx, currentUrl) => {
+        const hubSlug = currentUrl.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
+        if (hubSlug === 'seattle') {
+          return { body: { unexpected: true } };
+        }
+        return {
+          body: {
+            data: {
+              marketplace_search: {
+                feed_units: {
+                  edges: [
+                    {
+                      node: {
+                        listing: {
+                          id: 'la-p2-ok',
+                          marketplace_listing_title: 'LA Page 2 OK',
+                          listing_price: { amount: '65.00' },
+                          is_sold: false,
+                          is_pending: false,
+                          delivery_types: ['IN_PERSON'],
+                        },
+                      },
+                    },
+                  ],
+                  page_info: { end_cursor: null, has_next_page: false },
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+    const bsm2 = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: faultTransport.transport,
+    });
+    const adapter2 = createFacebookAdapter({
+      browserSessionManager: bsm2,
+      sleep: async () => undefined,
+    });
+    const filters2 = {
+      ...createDefaultUnifiedFilter(),
+      facebookLocationSlugs: ['seattle', 'la'],
+    };
+    const t2 = adapter2.translateFilters('camera', filters2, 'relevance', makeContext());
+    const init2 = await adapter2.executeInitial({
+      keywords: 'camera',
+      unifiedFilters: filters2,
+      sortOrder: 'relevance',
+      translation: t2,
+      context: makeContext(),
+    });
+    const lmFault = await adapter2.loadMore({
+      keywords: 'camera',
+      unifiedFilters: filters2,
+      sortOrder: 'relevance',
+      translation: t2,
+      context: makeContext(),
+      cursor: init2.nextCursor,
+      page: 2,
+    });
+    expect(lmFault.runStatus).toBe('success');
+    expect(lmFault.listings.map((l) => l.marketplaceListingId)).toEqual(['la-p2-ok']);
+    await bsm2.shutdown();
+
+    // 3. Aborting context.signal during cooldown returns stoppedByUser: true and retains hub 1 listings
+    const abortController = new AbortController();
+    const abortTransport = createScriptedFacebookTransport({
+      stepsByUrl: (url) => makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
+      onScrollLoadMore: async (_idx, currentUrl) => {
+        const hubSlug = currentUrl.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
+        return {
+          body: {
+            data: {
+              marketplace_search: {
+                feed_units: {
+                  edges: [
+                    {
+                      node: {
+                        listing: {
+                          id: `${hubSlug}-p2`,
+                          marketplace_listing_title: `${hubSlug} Page 2`,
+                          listing_price: { amount: '55.00' },
+                          is_sold: false,
+                          is_pending: false,
+                          delivery_types: ['IN_PERSON'],
+                        },
+                      },
+                    },
+                  ],
+                  page_info: { end_cursor: null, has_next_page: false },
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+    const bsm3 = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: abortTransport.transport,
+    });
+    let inLoadMore = false;
+    const adapter3 = createFacebookAdapter({
+      browserSessionManager: bsm3,
+      sleep: async () => {
+        if (inLoadMore) {
+          abortController.abort(new Error('User stopped'));
+        }
+      },
+    });
+    const t3 = adapter3.translateFilters('camera', filters2, 'relevance', makeContext());
+    const init3 = await adapter3.executeInitial({
+      keywords: 'camera',
+      unifiedFilters: filters2,
+      sortOrder: 'relevance',
+      translation: t3,
+      context: makeContext(),
+    });
+    inLoadMore = true;
+    const lmAbort = await adapter3.loadMore({
+      keywords: 'camera',
+      unifiedFilters: filters2,
+      sortOrder: 'relevance',
+      translation: t3,
+      context: makeContext({ signal: abortController.signal }),
+      cursor: init3.nextCursor,
+      page: 2,
+    });
+    expect(lmAbort.stoppedByUser).toBe(true);
+    expect(lmAbort.runStatus).toBe('success');
+    expect(lmAbort.listings.map((l) => l.marketplaceListingId)).toEqual(['seattle-p2']);
+    await bsm3.shutdown();
   });
 });

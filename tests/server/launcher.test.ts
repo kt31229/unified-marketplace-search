@@ -1,6 +1,8 @@
+import path from 'node:path';
+import { build } from 'esbuild';
 import { describe, expect, it, vi } from 'vitest';
 import { runServerEntrypoint } from '../../src/server/index.ts';
-import { launchApp } from '../../src/server/launcher.ts';
+import { defaultOpenUrl, launchApp } from '../../src/server/launcher.ts';
 import type { RunningServer } from '../../src/server/server.ts';
 
 describe('launchApp', () => {
@@ -271,5 +273,90 @@ describe('runServerEntrypoint (npm start)', () => {
     expect(envRes.action).toBe('started');
     expect(envRes.openedBrowser).toBe(false);
     expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  it('does not bundle launcher.ts or launchApp into dist/server/index.js', async () => {
+    const result = await build({
+      entryPoints: [path.resolve(process.cwd(), 'src/server/index.ts')],
+      bundle: true,
+      platform: 'node',
+      target: 'node24',
+      format: 'esm',
+      packages: 'external',
+      write: false,
+    });
+
+    const outputText = result.outputFiles.map((file) => file.text).join('\n');
+    expect(outputText).not.toContain('launchApp');
+  });
+});
+
+describe('defaultOpenUrl', () => {
+  it('spawns chrome.exe directly on win32 when installed', async () => {
+    const unref = vi.fn();
+    const spawnImpl = vi.fn(() => ({ unref })) as unknown as Parameters<typeof defaultOpenUrl>[2] extends {
+      spawnImpl?: infer S;
+    }
+      ? S
+      : never;
+    const expectedChrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+
+    await defaultOpenUrl('http://127.0.0.1:4173', 'win32', {
+      env: { ProgramFiles: 'C:\\Program Files' },
+      existsSync: (p) => p === expectedChrome,
+      spawnImpl,
+    });
+
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+    expect(spawnImpl).toHaveBeenCalledWith(expectedChrome, ['http://127.0.0.1:4173/'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    expect(unref).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to cmd start on win32 when chrome.exe is not found', async () => {
+    const unref = vi.fn();
+    const spawnImpl = vi.fn(() => ({ unref })) as unknown as NonNullable<
+      Parameters<typeof defaultOpenUrl>[2]
+    >['spawnImpl'];
+
+    await defaultOpenUrl('http://127.0.0.1:4173', 'win32', {
+      env: { ProgramFiles: 'C:\\Program Files' },
+      existsSync: () => false,
+      spawnImpl,
+    });
+
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+    expect(spawnImpl).toHaveBeenCalledWith('cmd', ['/c', 'start', '', 'http://127.0.0.1:4173/'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    expect(unref).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens Google Chrome on darwin when Chrome.app exists', async () => {
+    const unref = vi.fn();
+    const spawnImpl = vi.fn(() => ({ unref })) as unknown as NonNullable<
+      Parameters<typeof defaultOpenUrl>[2]
+    >['spawnImpl'];
+
+    await defaultOpenUrl('http://127.0.0.1:4173', 'darwin', {
+      env: {},
+      existsSync: (p) => p === '/Applications/Google Chrome.app',
+      spawnImpl,
+    });
+
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+    expect(spawnImpl).toHaveBeenCalledWith(
+      'open',
+      ['-a', 'Google Chrome', 'http://127.0.0.1:4173/'],
+      {
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    expect(unref).toHaveBeenCalledTimes(1);
   });
 });

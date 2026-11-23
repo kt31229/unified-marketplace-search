@@ -299,4 +299,75 @@ describe('BrowserSessionManager', () => {
 
     await manager.shutdown();
   });
+
+  it('maintains one persistent tab per pageKey in background mode while preserving unkeyed single-tab behavior', async () => {
+    vi.useFakeTimers();
+    const dataDir = createTempDir();
+    const fake = createFakeBrowserTransport();
+    const manager = new BrowserSessionManager({
+      dataDir,
+      getBrowserChannel: () => 'chrome',
+      transport: fake.transport,
+      idleTimeoutMs: 5_000,
+    });
+
+    // First pageKey claims the initial blank page (no extra newPage)
+    let seattlePage!: BrowserPageHandle;
+    await manager.runInBackgroundPage(
+      'facebook',
+      async (page) => {
+        seattlePage = page;
+        await page.goto('https://www.facebook.com/marketplace/seattle/search/');
+      },
+      { pageKey: 'seattle' },
+    );
+    expect(fake.launches[0]?.pages).toHaveLength(1);
+    expect(seattlePage.url()).toBe('https://www.facebook.com/marketplace/seattle/search/');
+
+    // Second pageKey opens a new tab while keeping 'seattle' open at its URL
+    let sfPage!: BrowserPageHandle;
+    await manager.runInBackgroundPage(
+      'facebook',
+      async (page) => {
+        sfPage = page;
+        await page.goto('https://www.facebook.com/marketplace/sanfrancisco/search/');
+      },
+      { pageKey: 'sanfrancisco' },
+    );
+    expect(fake.launches[0]?.pages).toHaveLength(2);
+    expect(sfPage).not.toBe(seattlePage);
+    expect(seattlePage.url()).toBe('https://www.facebook.com/marketplace/seattle/search/');
+    expect(sfPage.url()).toBe('https://www.facebook.com/marketplace/sanfrancisco/search/');
+
+    // Returning to 'seattle' reuses the exact same page handle without closing 'sanfrancisco'
+    await manager.runInBackgroundPage(
+      'facebook',
+      async (page) => {
+        expect(page).toBe(seattlePage);
+      },
+      { pageKey: 'seattle' },
+    );
+    expect(sfPage.isClosed?.()).toBe(false);
+
+    // Unkeyed callers (e.g. poshmark) keep single-tab behavior
+    await manager.runInBackgroundPage('poshmark', async (page) => {
+      await page.goto('https://poshmark.com/search?query=coat');
+    });
+    expect(fake.launches[1]?.pages).toHaveLength(1);
+
+    // Idle timeout clears keyed pages so subsequent launch opens a fresh tab
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fake.launches[0]?.closed).toBe(true);
+
+    await manager.runInBackgroundPage(
+      'facebook',
+      async (page) => {
+        expect(page).not.toBe(seattlePage);
+      },
+      { pageKey: 'seattle' },
+    );
+    expect(fake.launches).toHaveLength(3);
+
+    await manager.shutdown();
+  });
 });

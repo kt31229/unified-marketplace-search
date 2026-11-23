@@ -260,16 +260,19 @@ function isChallengeUrlOrDom(url: string, title: string, html: string): boolean 
     return true;
   }
 
-  const lowerHtml = html.toLowerCase();
+  const visibleHtml = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .toLowerCase();
   if (
-    lowerHtml.includes('id="login_form"') ||
-    lowerHtml.includes('name="login"') ||
-    lowerHtml.includes('id="checkpoint_title"') ||
-    lowerHtml.includes('/checkpoint/') ||
-    lowerHtml.includes('two_step_verification') ||
-    lowerHtml.includes('g-recaptcha') ||
-    lowerHtml.includes('cf-turnstile') ||
-    lowerHtml.includes('you must log in to continue')
+    visibleHtml.includes('id="login_form"') ||
+    visibleHtml.includes('name="login"') ||
+    visibleHtml.includes('id="checkpoint_title"') ||
+    visibleHtml.includes('/checkpoint/') ||
+    visibleHtml.includes('two_step_verification') ||
+    visibleHtml.includes('g-recaptcha') ||
+    visibleHtml.includes('cf-turnstile') ||
+    visibleHtml.includes('you must log in to continue')
   ) {
     return true;
   }
@@ -810,7 +813,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
               rawEdgeCount: normalized.rawEdgeCount,
             };
           },
-          { signal },
+          { signal, pageKey: hub.slug },
         ),
         this.timeoutMs,
         signal,
@@ -1039,6 +1042,169 @@ export class FacebookAdapter implements MarketplaceAdapter {
     };
   }
 
+  private async fetchHubLoadMore(
+    hub: FacebookHubCursorState,
+    unifiedFilters: UnifiedFilter,
+    seenIds: Set<string>,
+    signal?: AbortSignal,
+  ): Promise<
+    | {
+        ok: true;
+        listings: Listing[];
+        droppedMalformedCount: number;
+        endCursor: string | null;
+        hasNextPage: boolean;
+        rawEdgeCount: number;
+      }
+    | {
+        ok: false;
+        runStatus: 'challenge_or_auth_required' | 'timeout' | 'parse_error' | 'network_error';
+        errorMessage: string;
+        droppedMalformedCount?: number;
+      }
+  > {
+    const deadlineMs = this.clock() + this.timeoutMs;
+    const remainingMs = () => Math.max(1, deadlineMs - this.clock());
+
+    try {
+      return await createTimeoutRace(
+        this.browserSessionManager.runInBackgroundPage(
+          'facebook',
+          async (page, context) => {
+            const currentUrl = page.url();
+            const expectedPath = `/marketplace/${encodeURIComponent(hub.slug)}/search`;
+            if (!currentUrl.includes(expectedPath)) {
+              const navRes = await page.goto(hub.searchUrl, {
+                waitUntil: 'domcontentloaded',
+                timeout: remainingMs(),
+              });
+              const navStatus = navRes?.status();
+              if (navStatus === 401 || navStatus === 403) {
+                return {
+                  ok: false as const,
+                  runStatus: 'challenge_or_auth_required' as const,
+                  errorMessage: `Facebook Marketplace returned HTTP ${navStatus}.`,
+                };
+              }
+            }
+
+            if (await hasMissingAuthenticatedCookie(context)) {
+              return {
+                ok: false as const,
+                runStatus: 'challenge_or_auth_required' as const,
+                errorMessage: 'Facebook Marketplace session is not signed in.',
+              };
+            }
+
+            if (!page.waitForResponse) {
+              return {
+                ok: false as const,
+                runStatus: 'network_error' as const,
+                errorMessage: 'Browser page does not support response interception.',
+              };
+            }
+
+            const responsePromise = page.waitForResponse(isPaginationGraphqlResponse, {
+              timeout: remainingMs(),
+            });
+
+            await page.evaluate(() => {
+              window.scrollTo(0, document.body.scrollHeight);
+            });
+
+            const res = await responsePromise;
+            const status = res.status();
+            if (status === 401 || status === 403) {
+              return {
+                ok: false as const,
+                runStatus: 'challenge_or_auth_required' as const,
+                errorMessage: `Facebook Marketplace GraphQL pagination blocked with HTTP ${status}.`,
+              };
+            }
+
+            const payloads = await parseGraphqlResponseBody(res);
+            let feedUnits: z.infer<typeof FacebookFeedUnitsSchema> | null = null;
+            let hasAuthError = false;
+            for (const payload of payloads) {
+              if (hasRelayAuthError(payload)) {
+                hasAuthError = true;
+              }
+              const found = findFeedUnitsInTree(payload);
+              if (found) {
+                feedUnits = found;
+                break;
+              }
+            }
+
+            if (hasAuthError) {
+              return {
+                ok: false as const,
+                runStatus: 'challenge_or_auth_required' as const,
+                errorMessage:
+                  'Facebook Marketplace presented a login prompt or checkpoint during pagination.',
+              };
+            }
+
+            if (!feedUnits) {
+              return {
+                ok: false as const,
+                runStatus: 'parse_error' as const,
+                errorMessage: `Unrecognized CometMarketplaceSearchContentPaginationQuery response for ${hub.label}.`,
+              };
+            }
+
+            const normalized = normalizeFeedUnits(
+              feedUnits,
+              hub.slug,
+              unifiedFilters,
+              hub.rankOffset,
+              seenIds,
+            );
+            if (normalized.runStatus === 'parse_error') {
+              return {
+                ok: false as const,
+                runStatus: 'parse_error' as const,
+                errorMessage: normalized.errorMessage ?? 'Facebook Marketplace parse error.',
+                droppedMalformedCount: normalized.droppedMalformedCount,
+              };
+            }
+
+            return {
+              ok: true as const,
+              listings: normalized.listings,
+              droppedMalformedCount: normalized.droppedMalformedCount,
+              endCursor: normalized.endCursor,
+              hasNextPage: normalized.hasNextPage,
+              rawEdgeCount: normalized.rawEdgeCount,
+            };
+          },
+          { signal, pageKey: hub.slug },
+        ),
+        this.timeoutMs,
+        signal,
+        'Facebook Marketplace',
+      );
+    } catch (err) {
+      if (signal?.aborted) {
+        throw err;
+      }
+      if (isTimeoutError(err)) {
+        return {
+          ok: false,
+          runStatus: 'timeout',
+          errorMessage:
+            err instanceof Error ? err.message : `Facebook Marketplace load-more timed out for ${hub.label}.`,
+        };
+      }
+      return {
+        ok: false,
+        runStatus: 'network_error',
+        errorMessage:
+          err instanceof Error ? err.message : `Facebook Marketplace load-more failed for ${hub.label}.`,
+      };
+    }
+  }
+
   async loadMore(params: AdapterLoadMoreParams): Promise<AdapterBatchResult> {
     if (this.challengeLatched) {
       return {
@@ -1061,12 +1227,8 @@ export class FacebookAdapter implements MarketplaceAdapter {
       };
     }
 
-    const targetHub =
-      cursor.hubs.find(
-        (h) => h.slug === cursor.currentLoadedHubSlug && h.hasNextPage && Boolean(h.endCursor),
-      ) ?? cursor.hubs.find((h) => h.hasNextPage && Boolean(h.endCursor));
-
-    if (!targetHub) {
+    const eligibleHubs = cursor.hubs.filter((h) => h.hasNextPage && Boolean(h.endCursor));
+    if (eligibleHubs.length === 0) {
       return {
         runStatus: 'empty',
         listings: [],
@@ -1075,192 +1237,171 @@ export class FacebookAdapter implements MarketplaceAdapter {
       };
     }
 
+    const { context, unifiedFilters } = params;
+    const sleepFn = context.sleep ?? this.sleep;
+    const totalCities = eligibleHubs.length;
+
     const seenIds = new Set(cursor.seenIds);
-    const deadlineMs = this.clock() + this.timeoutMs;
-    const remainingMs = () => Math.max(1, deadlineMs - this.clock());
+    const allListings: Listing[] = [];
+    const updatedHubsBySlug = new Map(cursor.hubs.map((h) => [h.slug, { ...h }]));
+    let totalDroppedMalformed = 0;
+    let completedCities = 0;
+    let lastLoadedHubSlug = cursor.currentLoadedHubSlug;
+    let lastErrorStatus: 'timeout' | 'parse_error' | 'network_error' | null = null;
+    let lastErrorMessage: string | null = null;
 
-    try {
-      return await createTimeoutRace(
-        this.browserSessionManager.runInBackgroundPage(
-          'facebook',
-          async (page, context) => {
-            const currentUrl = page.url();
-            const expectedPath = `/marketplace/${encodeURIComponent(targetHub.slug)}/search`;
-            if (!currentUrl.includes(expectedPath)) {
-              const navRes = await page.goto(targetHub.searchUrl, {
-                waitUntil: 'domcontentloaded',
-                timeout: remainingMs(),
-              });
-              const navStatus = navRes?.status();
-              if (navStatus === 401 || navStatus === 403) {
-                this.challengeLatched = true;
-                return {
-                  runStatus: 'challenge_or_auth_required',
-                  listings: [],
-                  droppedMalformedCount: 0,
-                  hasMore: false,
-                  errorMessage: `Facebook Marketplace returned HTTP ${navStatus}.`,
-                };
-              }
-            }
-
-            if (await hasMissingAuthenticatedCookie(context)) {
-              this.challengeLatched = true;
-              return {
-                runStatus: 'challenge_or_auth_required',
-                listings: [],
-                droppedMalformedCount: 0,
-                hasMore: false,
-                errorMessage: 'Facebook Marketplace session is not signed in.',
-              };
-            }
-
-            if (!page.waitForResponse) {
-              return {
-                runStatus: 'network_error',
-                listings: [],
-                droppedMalformedCount: 0,
-                hasMore: false,
-                errorMessage: 'Browser page does not support response interception.',
-              };
-            }
-
-            const responsePromise = page.waitForResponse(isPaginationGraphqlResponse, {
-              timeout: remainingMs(),
-            });
-
-            await page.evaluate(() => {
-              window.scrollTo(0, document.body.scrollHeight);
-            });
-
-            const res = await responsePromise;
-            const status = res.status();
-            if (status === 401 || status === 403) {
-              this.challengeLatched = true;
-              return {
-                runStatus: 'challenge_or_auth_required',
-                listings: [],
-                droppedMalformedCount: 0,
-                hasMore: false,
-                errorMessage: `Facebook Marketplace GraphQL pagination blocked with HTTP ${status}.`,
-              };
-            }
-
-            const payloads = await parseGraphqlResponseBody(res);
-            let feedUnits: z.infer<typeof FacebookFeedUnitsSchema> | null = null;
-            let hasAuthError = false;
-            for (const payload of payloads) {
-              if (hasRelayAuthError(payload)) {
-                hasAuthError = true;
-              }
-              const found = findFeedUnitsInTree(payload);
-              if (found) {
-                feedUnits = found;
-                break;
-              }
-            }
-
-            if (hasAuthError) {
-              this.challengeLatched = true;
-              return {
-                runStatus: 'challenge_or_auth_required',
-                listings: [],
-                droppedMalformedCount: 0,
-                hasMore: false,
-                errorMessage:
-                  'Facebook Marketplace presented a login prompt or checkpoint during pagination.',
-              };
-            }
-
-            if (!feedUnits) {
-              return {
-                runStatus: 'parse_error',
-                listings: [],
-                droppedMalformedCount: 0,
-                hasMore: false,
-                errorMessage: 'Unrecognized CometMarketplaceSearchContentPaginationQuery response.',
-              };
-            }
-
-            const normalized = normalizeFeedUnits(
-              feedUnits,
-              targetHub.slug,
-              params.unifiedFilters,
-              targetHub.rankOffset,
-              seenIds,
-            );
-            if (normalized.runStatus === 'parse_error') {
-              return {
-                runStatus: 'parse_error',
-                listings: [],
-                droppedMalformedCount: normalized.droppedMalformedCount,
-                hasMore: false,
-                errorMessage: normalized.errorMessage,
-              };
-            }
-
-            const updatedHubs = cursor.hubs.map((h) =>
-              h.slug === targetHub.slug
-                ? {
-                    ...h,
-                    endCursor: normalized.endCursor,
-                    hasNextPage: normalized.hasNextPage,
-                    rankOffset: h.rankOffset + normalized.rawEdgeCount,
-                  }
-                : h,
-            );
-            const hasMore = updatedHubs.some((h) => h.hasNextPage && Boolean(h.endCursor));
-
-            return {
-              runStatus: normalized.listings.length > 0 ? 'success' : 'empty',
-              listings: normalized.listings,
-              droppedMalformedCount: normalized.droppedMalformedCount,
-              hasMore,
-              nextCursor: hasMore
-                ? ({
-                    hubs: updatedHubs,
-                    currentLoadedHubSlug: targetHub.slug,
-                    seenIds: Array.from(seenIds),
-                    nativeQuery: cursor.nativeQuery,
-                  } satisfies FacebookCursor)
-                : undefined,
-            };
-          },
-          { signal: params.context.signal },
-        ),
-        this.timeoutMs,
-        params.context.signal,
-        'Facebook Marketplace',
-      );
-    } catch (err) {
-      if (params.context.signal?.aborted) {
-        return {
-          runStatus: 'network_error',
-          listings: [],
-          droppedMalformedCount: 0,
-          hasMore: false,
-          errorMessage: 'Search cancelled.',
-        };
-      }
-      if (isTimeoutError(err)) {
-        return {
-          runStatus: 'timeout',
-          listings: [],
-          droppedMalformedCount: 0,
-          hasMore: false,
-          errorMessage:
-            err instanceof Error ? err.message : 'Facebook Marketplace load-more timed out.',
-        };
-      }
+    const buildStoppedResult = (): AdapterBatchResult => {
+      const updatedHubs = cursor.hubs.map((h) => updatedHubsBySlug.get(h.slug) ?? h);
+      const hasMore = updatedHubs.some((h) => h.hasNextPage && Boolean(h.endCursor));
       return {
-        runStatus: 'network_error',
+        runStatus: allListings.length > 0 ? 'success' : 'empty',
+        listings: interleaveListingsAcrossHubs(allListings),
+        droppedMalformedCount: totalDroppedMalformed,
+        hasMore,
+        nextCursor: hasMore
+          ? ({
+              hubs: updatedHubs,
+              currentLoadedHubSlug: lastLoadedHubSlug,
+              seenIds: Array.from(seenIds),
+              nativeQuery: cursor.nativeQuery,
+            } satisfies FacebookCursor)
+          : undefined,
+        completedCities,
+        totalCities,
+        currentCityLabel: null,
+        stoppedByUser: true,
+      };
+    };
+
+    for (let i = 0; i < eligibleHubs.length; i += 1) {
+      const hub = eligibleHubs[i]!;
+      if (context.signal?.aborted) {
+        return buildStoppedResult();
+      }
+
+      if (i > 0) {
+        const cooldownMs = this.computeCooldownMs();
+        try {
+          await sleepFn(cooldownMs, context.signal);
+        } catch {
+          return buildStoppedResult();
+        }
+      }
+
+      if (context.signal?.aborted) {
+        return buildStoppedResult();
+      }
+
+      context.onProgress?.({
+        runStatus: 'running',
+        completedCities: i + 1,
+        totalCities,
+        currentCityLabel: hub.label,
+      });
+
+      let outcome: Awaited<ReturnType<FacebookAdapter['fetchHubLoadMore']>>;
+      try {
+        outcome = await this.fetchHubLoadMore(hub, unifiedFilters, seenIds, context.signal);
+      } catch {
+        return buildStoppedResult();
+      }
+
+      if (!outcome.ok) {
+        totalDroppedMalformed += outcome.droppedMalformedCount ?? 0;
+
+        if (outcome.runStatus === 'challenge_or_auth_required') {
+          this.challengeLatched = true;
+          const retained = interleaveListingsAcrossHubs(allListings);
+          return {
+            runStatus: 'challenge_or_auth_required',
+            listings: retained,
+            droppedMalformedCount: totalDroppedMalformed,
+            hasMore: false,
+            completedCities,
+            totalCities,
+            currentCityLabel: null,
+            errorMessage:
+              completedCities > 0
+                ? `${outcome.errorMessage} Circuit breaker aborted remaining hubs; retained ${retained.length} earlier Listing(s).`
+                : outcome.errorMessage,
+          };
+        }
+
+        lastErrorStatus = outcome.runStatus;
+        lastErrorMessage = outcome.errorMessage;
+
+        if (totalCities === 1) {
+          return {
+            runStatus: outcome.runStatus,
+            listings: [],
+            droppedMalformedCount: totalDroppedMalformed,
+            hasMore: false,
+            completedCities,
+            totalCities,
+            currentCityLabel: null,
+            errorMessage: outcome.errorMessage,
+          };
+        }
+        continue;
+      }
+
+      completedCities += 1;
+      lastLoadedHubSlug = hub.slug;
+      totalDroppedMalformed += outcome.droppedMalformedCount;
+      allListings.push(...outcome.listings);
+
+      updatedHubsBySlug.set(hub.slug, {
+        ...hub,
+        endCursor: outcome.endCursor,
+        hasNextPage: outcome.hasNextPage,
+        rankOffset: hub.rankOffset + outcome.rawEdgeCount,
+      });
+
+      const updatedHubsSoFar = cursor.hubs.map((h) => updatedHubsBySlug.get(h.slug) ?? h);
+      const hasMoreSoFar = updatedHubsSoFar.some((h) => h.hasNextPage && Boolean(h.endCursor));
+      if (outcome.listings.length > 0) {
+        context.onBatch?.({
+          listings: outcome.listings,
+          cityHub: hub.slug,
+          hasMore: hasMoreSoFar,
+        });
+      }
+    }
+
+    const updatedHubs = cursor.hubs.map((h) => updatedHubsBySlug.get(h.slug) ?? h);
+    const hasMore = updatedHubs.some((h) => h.hasNextPage && Boolean(h.endCursor));
+
+    if (completedCities === 0 && lastErrorStatus) {
+      return {
+        runStatus: lastErrorStatus,
         listings: [],
-        droppedMalformedCount: 0,
+        droppedMalformedCount: totalDroppedMalformed,
         hasMore: false,
-        errorMessage:
-          err instanceof Error ? err.message : 'Facebook Marketplace load-more failed.',
+        completedCities,
+        totalCities,
+        currentCityLabel: null,
+        errorMessage: lastErrorMessage,
       };
     }
+
+    const interleaved = interleaveListingsAcrossHubs(allListings);
+    return {
+      runStatus: interleaved.length > 0 ? 'success' : 'empty',
+      listings: interleaved,
+      droppedMalformedCount: totalDroppedMalformed,
+      hasMore,
+      nextCursor: hasMore
+        ? ({
+            hubs: updatedHubs,
+            currentLoadedHubSlug: lastLoadedHubSlug,
+            seenIds: Array.from(seenIds),
+            nativeQuery: cursor.nativeQuery,
+          } satisfies FacebookCursor)
+        : undefined,
+      completedCities,
+      totalCities,
+      currentCityLabel: null,
+    };
   }
 }
 

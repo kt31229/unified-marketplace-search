@@ -807,4 +807,403 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
     expect(within(page2Card).getByText('New')).toHaveClass('new-badge');
     expect(within(ebayCard).queryByRole('button', { name: /Load more/i })).not.toBeInTheDocument();
   });
+
+  it('appends load-more Listings at the bottom under relevance instead of interleaving between existing Listings', async () => {
+    const getGridTitles = () => {
+      const grid = screen.getByTestId('listing-grid');
+      return within(grid)
+        .getAllByRole('article')
+        .map((article) => {
+          const links = within(article).getAllByRole('link');
+          return links[links.length - 1]?.textContent?.trim() ?? '';
+        });
+    };
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
+      }
+      if (url === '/api/searches/stream') {
+        return createSseResponse([
+          {
+            event: 'run_started',
+            data: {
+              searchRunId: 'run-rel-append-1',
+              diagnostics: makeDiagnostics(['ebay', 'poshmark']),
+              statuses: makeStatuses(['ebay', 'poshmark'], {
+                ebay: { runStatus: 'running', loadedCount: 0 },
+                poshmark: { runStatus: 'running', loadedCount: 0 },
+              }),
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-rel-append-1',
+              marketplace: 'ebay',
+              listings: [
+                makeListing('ebay', 'e1', { title: 'eBay 1', adapterRank: 1 }),
+                makeListing('ebay', 'e2', { title: 'eBay 2', adapterRank: 2 }),
+                makeListing('ebay', 'e3', { title: 'eBay 3', adapterRank: 3 }),
+              ],
+              hasMore: true,
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-rel-append-1',
+              marketplace: 'poshmark',
+              listings: [makeListing('poshmark', 'p1', { title: 'Posh 1', adapterRank: 1 })],
+              hasMore: true,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-rel-append-1',
+              statuses: makeStatuses(['ebay', 'poshmark'], {
+                ebay: { loadedCount: 3 },
+                poshmark: { loadedCount: 1 },
+              }),
+            },
+          },
+        ]);
+      }
+      if (url === '/api/searches/run-rel-append-1/load-more') {
+        return createSseResponse([
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-rel-append-1',
+              marketplace: 'ebay',
+              listings: [makeListing('ebay', 'e4', { title: 'eBay 4', adapterRank: 4 })],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-rel-append-1',
+              marketplace: 'poshmark',
+              listings: [makeListing('poshmark', 'p2', { title: 'Posh 2', adapterRank: 2 })],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-rel-append-1',
+              statuses: makeStatuses(['ebay', 'poshmark'], {
+                ebay: { loadedCount: 4 },
+                poshmark: { loadedCount: 2 },
+              }),
+            },
+          },
+        ]);
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    const main = screen.getByRole('main');
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
+    await userEvent.click(within(main).getByRole('button', { name: /^Search$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('eBay 3')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual(['eBay 1', 'Posh 1', 'eBay 2', 'eBay 3']);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load more Listings/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Posh 2')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual(['eBay 1', 'Posh 1', 'eBay 2', 'eBay 3', 'eBay 4', 'Posh 2']);
+  });
+
+  it('appends load-more Listings at the bottom under newest across consecutive clicks', async () => {
+    const getGridTitles = () => {
+      const grid = screen.getByTestId('listing-grid');
+      return within(grid)
+        .getAllByRole('article')
+        .map((article) => {
+          const links = within(article).getAllByRole('link');
+          return links[links.length - 1]?.textContent?.trim() ?? '';
+        });
+    };
+
+    let loadMoreCall = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
+      }
+      if (url === '/api/searches/stream') {
+        return createSseResponse([
+          {
+            event: 'run_started',
+            data: {
+              searchRunId: 'run-newest-append-1',
+              diagnostics: makeDiagnostics(['ebay']),
+              statuses: makeStatuses(['ebay'], {
+                ebay: { runStatus: 'running', loadedCount: 0 },
+              }),
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-newest-append-1',
+              marketplace: 'ebay',
+              listings: [
+                makeListing('ebay', 'n1', {
+                  title: 'Nov 18 Vest',
+                  listedAt: '2026-11-18T12:00:00Z',
+                  adapterRank: 2,
+                }),
+                makeListing('ebay', 'n2', {
+                  title: 'Nov 20 Coat',
+                  listedAt: '2026-11-20T12:00:00Z',
+                  adapterRank: 1,
+                }),
+              ],
+              hasMore: true,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-newest-append-1',
+              statuses: makeStatuses(['ebay'], {
+                ebay: { loadedCount: 2 },
+              }),
+            },
+          },
+        ]);
+      }
+      if (url === '/api/searches/run-newest-append-1/load-more') {
+        loadMoreCall += 1;
+        if (loadMoreCall === 1) {
+          return createSseResponse([
+            {
+              event: 'listings_batch',
+              data: {
+                searchRunId: 'run-newest-append-1',
+                marketplace: 'ebay',
+                listings: [
+                  makeListing('ebay', 'n3', {
+                    title: 'Nov 17 Jacket',
+                    listedAt: '2026-11-17T12:00:00Z',
+                    adapterRank: 4,
+                  }),
+                  makeListing('ebay', 'n4', {
+                    title: 'Nov 21 Parka',
+                    listedAt: '2026-11-21T12:00:00Z',
+                    adapterRank: 3,
+                  }),
+                ],
+                hasMore: true,
+              },
+            },
+            {
+              event: 'run_complete',
+              data: {
+                searchRunId: 'run-newest-append-1',
+                statuses: makeStatuses(['ebay'], {
+                  ebay: { loadedCount: 4 },
+                }),
+              },
+            },
+          ]);
+        }
+        return createSseResponse([
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: 'run-newest-append-1',
+              marketplace: 'ebay',
+              listings: [
+                makeListing('ebay', 'n5', {
+                  title: 'Nov 22 Fleece',
+                  listedAt: '2026-11-22T12:00:00Z',
+                  adapterRank: 5,
+                }),
+              ],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: 'run-newest-append-1',
+              statuses: makeStatuses(['ebay'], {
+                ebay: { loadedCount: 5 },
+              }),
+            },
+          },
+        ]);
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    const main = screen.getByRole('main');
+    await userEvent.selectOptions(screen.getByLabelText(/Sort order/i), 'newest');
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
+    await userEvent.click(within(main).getByRole('button', { name: /^Search$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Nov 20 Coat')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual(['Nov 20 Coat', 'Nov 18 Vest']);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load more Listings/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Nov 21 Parka')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual([
+      'Nov 20 Coat',
+      'Nov 18 Vest',
+      'Nov 21 Parka',
+      'Nov 17 Jacket',
+    ]);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load more Listings/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Nov 22 Fleece')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual([
+      'Nov 20 Coat',
+      'Nov 18 Vest',
+      'Nov 21 Parka',
+      'Nov 17 Jacket',
+      'Nov 22 Fleece',
+    ]);
+  });
+
+  it('preserves global price ordering across load-more Listings under price_asc and price_desc', async () => {
+    const getGridTitles = () => {
+      const grid = screen.getByTestId('listing-grid');
+      return within(grid)
+        .getAllByRole('article')
+        .map((article) => {
+          const links = within(article).getAllByRole('link');
+          return links[links.length - 1]?.textContent?.trim() ?? '';
+        });
+    };
+
+    let searchRunCount = 0;
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/saved-searches') {
+        return new Response(JSON.stringify({ savedSearches: [] }), { status: 200 });
+      }
+      if (url === '/api/searches/stream') {
+        searchRunCount += 1;
+        const runId = `run-price-${searchRunCount}`;
+        return createSseResponse([
+          {
+            event: 'run_started',
+            data: {
+              searchRunId: runId,
+              diagnostics: makeDiagnostics(['ebay']),
+              statuses: makeStatuses(['ebay'], {
+                ebay: { runStatus: 'running', loadedCount: 0 },
+              }),
+            },
+          },
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: runId,
+              marketplace: 'ebay',
+              listings: [
+                makeListing('ebay', `${runId}-1`, { title: '$50 Coat', price: 50, adapterRank: 1 }),
+                makeListing('ebay', `${runId}-2`, { title: '$100 Parka', price: 100, adapterRank: 2 }),
+              ],
+              hasMore: true,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: runId,
+              statuses: makeStatuses(['ebay'], {
+                ebay: { loadedCount: 2 },
+              }),
+            },
+          },
+        ]);
+      }
+      if (url === '/api/searches/run-price-1/load-more' || url === '/api/searches/run-price-2/load-more') {
+        const runId = url.includes('run-price-1') ? 'run-price-1' : 'run-price-2';
+        return createSseResponse([
+          {
+            event: 'listings_batch',
+            data: {
+              searchRunId: runId,
+              marketplace: 'ebay',
+              listings: [
+                makeListing('ebay', `${runId}-3`, { title: '$75 Vest', price: 75, adapterRank: 3 }),
+              ],
+              hasMore: false,
+            },
+          },
+          {
+            event: 'run_complete',
+            data: {
+              searchRunId: runId,
+              statuses: makeStatuses(['ebay'], {
+                ebay: { loadedCount: 3 },
+              }),
+            },
+          },
+        ]);
+      }
+      throw new Error(`Unexpected call: ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    const main = screen.getByRole('main');
+    await userEvent.selectOptions(screen.getByLabelText(/Sort order/i), 'price_asc');
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
+    await userEvent.click(within(main).getByRole('button', { name: /^Search$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('$50 Coat')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual(['$50 Coat', '$100 Parka']);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load more Listings/i }));
+    await waitFor(() => {
+      expect(screen.getByText('$75 Vest')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual(['$50 Coat', '$75 Vest', '$100 Parka']);
+
+    // Switch to price_desc (triggers a new search run)
+    await userEvent.selectOptions(screen.getByLabelText(/Sort order/i), 'price_desc');
+    await waitFor(() => {
+      expect(screen.queryByText('$75 Vest')).not.toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual(['$100 Parka', '$50 Coat']);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load more Listings/i }));
+    await waitFor(() => {
+      expect(screen.getByText('$75 Vest')).toBeInTheDocument();
+    });
+    expect(getGridTitles()).toEqual(['$100 Parka', '$75 Vest', '$50 Coat']);
+  });
 });

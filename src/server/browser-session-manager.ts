@@ -116,6 +116,7 @@ interface ProfileSlot {
   channel: BrowserChannel | null;
   context: BrowserContextHandle | null;
   page: BrowserPageHandle | null;
+  pagesByKey: Map<string, BrowserPageHandle>;
   idleTimer: ReturnType<typeof setTimeout> | null;
   inUse: boolean;
   lastUsedAtMs: number;
@@ -177,6 +178,7 @@ export class BrowserSessionManager {
         channel: null,
         context: null,
         page: null,
+        pagesByKey: new Map(),
         idleTimer: null,
         inUse: false,
         lastUsedAtMs: 0,
@@ -245,6 +247,7 @@ export class BrowserSessionManager {
     const context = slot.context;
     slot.context = null;
     slot.page = null;
+    slot.pagesByKey.clear();
     slot.mode = null;
     slot.channel = null;
     if (context) {
@@ -258,6 +261,7 @@ export class BrowserSessionManager {
         this.clearIdleTimer(slot);
         slot.context = null;
         slot.page = null;
+        slot.pagesByKey.clear();
         slot.mode = null;
         slot.channel = null;
       }
@@ -276,6 +280,26 @@ export class BrowserSessionManager {
     return primary;
   }
 
+  private async getOrCreateKeyedPage(
+    slot: ProfileSlot,
+    pageKey: string,
+  ): Promise<BrowserPageHandle> {
+    const existing = slot.pagesByKey.get(pageKey);
+    if (existing && !existing.isClosed?.()) {
+      return existing;
+    }
+
+    const context = slot.context!;
+    const claimed = new Set<BrowserPageHandle>(slot.pagesByKey.values());
+    if (slot.page) {
+      claimed.add(slot.page);
+    }
+    const unclaimed = context.pages().find((p) => !p.isClosed?.() && !claimed.has(p));
+    const page = unclaimed ?? (await context.newPage());
+    slot.pagesByKey.set(pageKey, page);
+    return page;
+  }
+
   isContextActive(marketplace: BrowserMarketplaceId): boolean {
     return this.getSlot(marketplace).context !== null;
   }
@@ -287,7 +311,7 @@ export class BrowserSessionManager {
   async runInBackgroundPage<T>(
     marketplace: BrowserMarketplaceId,
     fn: (page: BrowserPageHandle, context: BrowserContextHandle) => Promise<T>,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; pageKey?: string },
   ): Promise<T> {
     if (this.shuttingDown) {
       throw new Error('BrowserSessionManager is shutting down.');
@@ -330,14 +354,20 @@ export class BrowserSessionManager {
         this.attachCloseListener(slot, context);
       }
 
-      if (!slot.page || slot.page.isClosed?.()) {
-        slot.page = await this.getOrCreateSinglePage(slot.context);
+      let activePage: BrowserPageHandle;
+      if (options?.pageKey) {
+        activePage = await this.getOrCreateKeyedPage(slot, options.pageKey);
+      } else {
+        if (!slot.page || slot.page.isClosed?.()) {
+          slot.page = await this.getOrCreateSinglePage(slot.context);
+        }
+        activePage = slot.page;
       }
 
       slot.inUse = true;
       slot.lastUsedAtMs = this.clock();
       try {
-        return await fn(slot.page, slot.context);
+        return await fn(activePage, slot.context);
       } finally {
         slot.inUse = false;
         slot.lastUsedAtMs = this.clock();
