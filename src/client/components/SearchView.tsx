@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   MARKETPLACE_IDS,
   MARKETPLACE_LABELS,
@@ -19,17 +19,37 @@ import { ListingGrid } from './ListingGrid.tsx';
 import type { FetchLike } from './SettingsView.tsx';
 import { StatusStrip } from './StatusStrip.tsx';
 
+export interface TriggeredSearchRequest {
+  seq: number;
+  keywords: string;
+  unifiedFilters: UnifiedFilter;
+  marketplaces: MarketplaceId[];
+  sortOrder: SortOrder;
+}
+
 export interface SearchViewProps {
   fetchImpl: FetchLike;
   unifiedFilters: UnifiedFilter;
+  keywords: string;
+  onKeywordsChange: (keywords: string) => void;
+  enabledMarketplaces: MarketplaceId[];
+  onEnabledMarketplacesChange: (marketplaces: MarketplaceId[]) => void;
+  sortOrder: SortOrder;
+  onSortOrderChange: (sortOrder: SortOrder) => void;
+  pendingRunRequest: TriggeredSearchRequest | null;
 }
 
-export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
-  const [keywords, setKeywords] = useState('');
-  const [enabledMarketplaces, setEnabledMarketplaces] = useState<MarketplaceId[]>([
-    ...MARKETPLACE_IDS,
-  ]);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('relevance');
+export function SearchView({
+  fetchImpl,
+  unifiedFilters,
+  keywords,
+  onKeywordsChange,
+  enabledMarketplaces,
+  onEnabledMarketplacesChange,
+  sortOrder,
+  onSortOrderChange,
+  pendingRunRequest,
+}: SearchViewProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
@@ -42,30 +62,36 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
   const [hasMoreByMp, setHasMoreByMp] = useState<Partial<Record<MarketplaceId, boolean>>>({});
 
   const activeAbortRef = useRef<AbortController | null>(null);
+  const lastTriggeredSeqRef = useRef<number>(0);
 
   const toggleMarketplace = (mp: MarketplaceId) => {
-    setEnabledMarketplaces((prev) =>
-      prev.includes(mp) ? prev.filter((item) => item !== mp) : [...prev, mp],
-    );
+    const next = enabledMarketplaces.includes(mp)
+      ? enabledMarketplaces.filter((item) => item !== mp)
+      : [...enabledMarketplaces, mp];
+    onEnabledMarketplacesChange(next);
   };
 
-  const validateSearch = (): string | null => {
-    if (!keywords.trim()) {
+  const validateSearch = (params: {
+    keywords: string;
+    unifiedFilters: UnifiedFilter;
+    marketplaces: MarketplaceId[];
+  }): string | null => {
+    if (!params.keywords.trim()) {
       return 'Enter search keywords.';
     }
-    if (enabledMarketplaces.length === 0) {
+    if (params.marketplaces.length === 0) {
       return 'Select at least one Marketplace.';
     }
     if (
-      (unifiedFilters.priceMin != null && unifiedFilters.priceMin < 0) ||
-      (unifiedFilters.priceMax != null && unifiedFilters.priceMax < 0)
+      (params.unifiedFilters.priceMin != null && params.unifiedFilters.priceMin < 0) ||
+      (params.unifiedFilters.priceMax != null && params.unifiedFilters.priceMax < 0)
     ) {
       return 'Prices must be non-negative.';
     }
     if (
-      unifiedFilters.priceMin != null &&
-      unifiedFilters.priceMax != null &&
-      unifiedFilters.priceMin > unifiedFilters.priceMax
+      params.unifiedFilters.priceMin != null &&
+      params.unifiedFilters.priceMax != null &&
+      params.unifiedFilters.priceMin > params.unifiedFilters.priceMax
     ) {
       return 'Minimum price must be less than or equal to maximum price.';
     }
@@ -127,8 +153,18 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
     }
   };
 
-  const runSearch = async (refresh: boolean) => {
-    const err = validateSearch();
+  const runSearch = async (
+    refresh: boolean,
+    override?: Omit<TriggeredSearchRequest, 'seq'>,
+  ) => {
+    const params = override ?? {
+      keywords,
+      unifiedFilters,
+      marketplaces: enabledMarketplaces,
+      sortOrder,
+    };
+
+    const err = validateSearch(params);
     if (err) {
       setValidationError(err);
       return;
@@ -147,10 +183,10 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          keywords: keywords.trim(),
-          unifiedFilters,
-          marketplaces: enabledMarketplaces,
-          sortOrder,
+          keywords: params.keywords.trim(),
+          unifiedFilters: params.unifiedFilters,
+          marketplaces: params.marketplaces,
+          sortOrder: params.sortOrder,
           refresh,
         }),
       });
@@ -174,6 +210,14 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
       }
     }
   };
+
+  useEffect(() => {
+    if (!pendingRunRequest || pendingRunRequest.seq === lastTriggeredSeqRef.current) {
+      return;
+    }
+    lastTriggeredSeqRef.current = pendingRunRequest.seq;
+    void runSearch(false, pendingRunRequest);
+  });
 
   const handleLoadMore = async () => {
     if (!searchRunId || isLoadingMore || isStreaming) {
@@ -252,7 +296,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
             <select
               aria-label="Sort order"
               value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+              onChange={(e) => onSortOrderChange(e.target.value as SortOrder)}
               className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800"
             >
               <option value="relevance">Relevance</option>
@@ -275,7 +319,7 @@ export function SearchView({ fetchImpl, unifiedFilters }: SearchViewProps) {
             aria-label="Search keywords"
             placeholder="Search secondhand Listings (e.g. patagonia nano puff)..."
             value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
+            onChange={(e) => onKeywordsChange(e.target.value)}
             className="min-w-[220px] flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
           />
           <button
