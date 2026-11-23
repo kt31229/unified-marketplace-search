@@ -343,7 +343,11 @@ function StatusCard({
           <button
             type="button"
             onClick={() => onOpenBrowserSession(marketplace, status.nativeSearchUrl)}
-            className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+            className={
+              status.runStatus === 'challenge_or_auth_required'
+                ? 'rounded border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-800 hover:bg-red-100 cursor-pointer'
+                : 'rounded border border-slate-300 bg-white px-2 py-0.5 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer'
+            }
           >
             Open browser session
           </button>

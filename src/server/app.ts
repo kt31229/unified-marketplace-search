@@ -18,12 +18,17 @@ import {
 } from '../shared/index.ts';
 import { createEbayAdapter } from './adapters/ebay.ts';
 import { createBrowserPlaceholderAdapter } from './adapters/placeholders.ts';
+import { createPoshmarkAdapter } from './adapters/poshmark.ts';
 import type {
   ClockFn,
   FetchLike,
   MarketplaceAdapter,
   SleepFn,
 } from './adapters/types.ts';
+import {
+  BrowserSessionManager,
+  type BrowserTransport,
+} from './browser-session-manager.ts';
 import { openDatabase, type AppDatabase } from './db.ts';
 import { ensureBaseDirectories, getProfileDir, resolveDataDir } from './paths.ts';
 import { SearchOrchestrator } from './search-orchestrator.ts';
@@ -39,6 +44,9 @@ export interface CreateAppDeps {
   clock?: ClockFn;
   sleep?: SleepFn;
   adapters?: Partial<Record<MarketplaceId, MarketplaceAdapter>>;
+  browserTransport?: BrowserTransport;
+  browserSessionManager?: BrowserSessionManager;
+  browserIdleTimeoutMs?: number;
   onShutdown?: () => Promise<void> | void;
   onOpenBrowserSession?: (marketplace: BrowserMarketplaceId, url?: string) => Promise<void> | void;
   onResetBrowserProfile?: (marketplace: BrowserMarketplaceId) => Promise<void> | void;
@@ -54,6 +62,7 @@ export interface AppInstance {
   database: AppDatabase;
   dataDir: string;
   secretsStore: SecretsStore;
+  browserSessionManager: BrowserSessionManager;
   registerTeardown: (hook: TeardownHook) => void;
   shutdown: () => Promise<void>;
 }
@@ -85,14 +94,33 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
   const teardownHooks: TeardownHook[] = [];
   let isShuttingDown = false;
 
+  const browserSessionManager =
+    deps.browserSessionManager ??
+    new BrowserSessionManager({
+      dataDir,
+      getBrowserChannel: () => database.settings.getSettings().browserChannel,
+      transport: deps.browserTransport,
+      idleTimeoutMs: deps.browserIdleTimeoutMs,
+      clock: deps.clock,
+    });
+
+  const registerTeardown = (hook: TeardownHook) => {
+    teardownHooks.push(hook);
+  };
+  registerTeardown(() => browserSessionManager.shutdown());
+
   const defaultEbayAdapter = createEbayAdapter({
     fetchImpl: deps.fetchImpl,
+    clock: deps.clock,
+  });
+  const defaultPoshmarkAdapter = createPoshmarkAdapter({
+    browserSessionManager,
     clock: deps.clock,
   });
 
   const adapters: Record<MarketplaceId, MarketplaceAdapter> = {
     ebay: deps.adapters?.ebay ?? defaultEbayAdapter,
-    poshmark: deps.adapters?.poshmark ?? createBrowserPlaceholderAdapter('poshmark'),
+    poshmark: deps.adapters?.poshmark ?? defaultPoshmarkAdapter,
     mercari: deps.adapters?.mercari ?? createBrowserPlaceholderAdapter('mercari'),
     facebook: deps.adapters?.facebook ?? createBrowserPlaceholderAdapter('facebook'),
   };
@@ -104,10 +132,6 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     clock: deps.clock,
     sleep: deps.sleep,
   });
-
-  const registerTeardown = (hook: TeardownHook) => {
-    teardownHooks.push(hook);
-  };
 
   const shutdown = async () => {
     if (isShuttingDown) {
@@ -125,11 +149,14 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     database.close();
   };
 
+  const isBrowserActive =
+    deps.isBrowserContextActive ?? ((mp: BrowserMarketplaceId) => browserSessionManager.isContextActive(mp));
+
   const buildSettingsResponse = (): SettingsResponse => ({
     settings: database.settings.getSettings(),
     ebay: secretsStore.getStatus(),
     dataDir,
-    browserProfiles: getBrowserProfilesStatus(dataDir, deps.isBrowserContextActive),
+    browserProfiles: getBrowserProfilesStatus(dataDir, isBrowserActive),
   });
 
   const app = new Hono();
@@ -309,17 +336,22 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
       // Optional JSON body
     }
 
-    if (!deps.onOpenBrowserSession) {
+    try {
+      if (deps.onOpenBrowserSession) {
+        await deps.onOpenBrowserSession(mpParsed.data, url);
+      } else {
+        await browserSessionManager.openForegroundSession(mpParsed.data, url);
+      }
+    } catch (err) {
       return c.json(
         {
-          error: 'Browser Session Manager is implemented in Ticket #21.',
+          error: err instanceof Error ? err.message : 'Failed to open browser session.',
           marketplace: mpParsed.data,
         },
-        501,
+        400,
       );
     }
 
-    await deps.onOpenBrowserSession(mpParsed.data, url);
     return c.json({ ok: true, marketplace: mpParsed.data });
   });
 
@@ -332,11 +364,12 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     const marketplace = mpParsed.data;
     if (deps.onResetBrowserProfile) {
       await deps.onResetBrowserProfile(marketplace);
-    }
-
-    const profileDir = getProfileDir(dataDir, marketplace);
-    if (fs.existsSync(profileDir)) {
-      fs.rmSync(profileDir, { recursive: true, force: true });
+      const profileDir = getProfileDir(dataDir, marketplace);
+      if (fs.existsSync(profileDir)) {
+        fs.rmSync(profileDir, { recursive: true, force: true });
+      }
+    } else {
+      await browserSessionManager.resetProfile(marketplace);
     }
 
     return c.json({
@@ -398,6 +431,7 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
     database,
     dataDir,
     secretsStore,
+    browserSessionManager,
     registerTeardown,
     shutdown,
   };
