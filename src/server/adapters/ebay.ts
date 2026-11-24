@@ -227,7 +227,7 @@ function normalizeEbayItem(
 
   const locationLabel =
     [item.itemLocation?.city, item.itemLocation?.stateOrProvince]
-      .filter((part): part is string => Boolean(part && part.trim()))
+      .filter((part): part is string => Boolean(part?.trim()))
       .join(', ') ||
     item.itemLocation?.country ||
     null;

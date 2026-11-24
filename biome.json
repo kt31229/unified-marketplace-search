@@ -1,29 +1,32 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
-  "files": {
-    "includes": ["src/**", "tests/**", "scripts/**"]
-  },
-  "formatter": {
-    "enabled": false
-  },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "a11y": {
-        "noAutofocus": "off",
-        "noStaticElementInteractions": "off",
-        "useAriaPropsSupportedByRole": "off",
-        "useSemanticElements": "off"
-      },
-      "correctness": {
-        "noUnsafeOptionalChaining": "off",
-        "useExhaustiveDependencies": "off"
-      },
-      "suspicious": {
-        "noArrayIndexKey": "off",
-        "noAssignInExpressions": "off"
-      }
-    }
-  }
+	"$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+	"files": {
+		"includes": ["src/**", "tests/**", "scripts/**"]
+	},
+	"formatter": {
+		"enabled": false
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended",
+			"a11y": {
+				"noAutofocus": "off",
+				"noStaticElementInteractions": "off",
+				"useAriaPropsSupportedByRole": "off",
+				"useSemanticElements": "off"
+			},
+			"correctness": {
+				"noUnsafeOptionalChaining": "off",
+				"useExhaustiveDependencies": "off"
+			},
+			"style": {
+				"noNonNullAssertion": "off"
+			},
+			"suspicious": {
+				"noArrayIndexKey": "off",
+				"noAssignInExpressions": "off"
+			}
+		}
+	}
 }

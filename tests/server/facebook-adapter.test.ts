@@ -166,7 +166,7 @@ function createScriptedFacebookTransport(options: ScriptedFacebookOptions) {
         return page;
       };
 
-      const initialPage = makePage();
+      makePage();
 
       return {
         pages: () => pages.filter((p) => !p.isClosed?.()),

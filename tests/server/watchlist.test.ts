@@ -32,7 +32,7 @@ afterEach(async () => {
 describe('Watchlist SQLite migration, PII-free persistence, and HTTP endpoints', () => {
   it('runs migration creating watchlist_entries with UNIQUE(marketplace, marketplace_listing_id) and strips seller PII', async () => {
     const dataDir = createTempDataDir();
-    let nowMs = Date.parse('2026-11-22T10:00:00.000Z');
+    const nowMs = Date.parse('2026-11-22T10:00:00.000Z');
     const instance = createApp({
       dataDir,
       env: {},

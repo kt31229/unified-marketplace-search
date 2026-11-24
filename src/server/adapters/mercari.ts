@@ -657,7 +657,7 @@ export class MercariAdapter implements MarketplaceAdapter {
 
   async loadMore(params: AdapterLoadMoreParams): Promise<AdapterBatchResult> {
     const cursor = params.cursor as MercariCursor | undefined;
-    if (!cursor || !cursor.nextKey || cursor.nextKey === '0') {
+    if (!cursor?.nextKey || cursor.nextKey === '0') {
       return {
         runStatus: 'empty',
         listings: [],
