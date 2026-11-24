@@ -86,12 +86,17 @@ const PoshmarkEnvelopeSchema = z.object({
     .optional(),
 });
 
+export interface PoshmarkPriceAmount {
+  val: string;
+  currency_code: 'USD';
+}
+
 export interface PoshmarkVmRestRequest {
   filters: {
     department: 'All';
     inventory_status: ['available'];
     condition?: string[];
-    price_amount_range?: Array<{ min?: number; max?: number }>;
+    price_amount_range?: Array<{ min?: PoshmarkPriceAmount; max?: PoshmarkPriceAmount }>;
   };
   query: string;
   sort_by: 'relevance_v2' | 'added_desc' | 'price_asc' | 'price_desc';
@@ -492,12 +497,12 @@ export class PoshmarkAdapter implements MarketplaceAdapter {
       notices.push('Poshmark has no Poor tier; mapped Poor to Fair (uf).');
     }
 
-    const priceRange: { min?: number; max?: number } = {};
+    const priceRange: { min?: PoshmarkPriceAmount; max?: PoshmarkPriceAmount } = {};
     if (unifiedFilters.priceMin != null) {
-      priceRange.min = Math.round(unifiedFilters.priceMin * 100);
+      priceRange.min = { val: String(unifiedFilters.priceMin), currency_code: 'USD' };
     }
     if (unifiedFilters.priceMax != null) {
-      priceRange.max = Math.round(unifiedFilters.priceMax * 100);
+      priceRange.max = { val: String(unifiedFilters.priceMax), currency_code: 'USD' };
     }
 
     const vmRestRequest: PoshmarkVmRestRequest = {
