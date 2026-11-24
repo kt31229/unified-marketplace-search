@@ -1,8 +1,8 @@
-import {
-  type ConditionTier,
-  type FacebookCityHub,
-  type FulfillmentMode,
-  type UnifiedFilter,
+import type {
+  ConditionTier,
+  FacebookCityHub,
+  FulfillmentMode,
+  UnifiedFilter,
 } from '../../shared/index.ts';
 
 const CONDITION_OPTIONS: ReadonlyArray<{ value: ConditionTier; label: string }> = [

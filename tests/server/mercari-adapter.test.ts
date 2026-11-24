@@ -731,7 +731,7 @@ describe('MercariAdapter', () => {
               resolve: (res: BrowserResponseHandle) => void;
             }
           | null = null;
-        let closeListeners: Array<() => void> = [];
+        const closeListeners: Array<() => void> = [];
 
         const emit = async (url: string, status: number, body: unknown) => {
           const res: BrowserResponseHandle = {

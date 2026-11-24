@@ -14,7 +14,6 @@ import {
 } from '../../shared/index.ts';
 import type {
   BrowserContextHandle,
-  BrowserPageHandle,
   BrowserResponseHandle,
   BrowserSessionManager,
 } from '../browser-session-manager.ts';

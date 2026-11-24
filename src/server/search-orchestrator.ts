@@ -457,7 +457,7 @@ export class SearchOrchestrator {
 
     const targets = (targetMarketplace ? [targetMarketplace] : MARKETPLACE_IDS).filter((mp) => {
       const state = run.marketplaces.get(mp);
-      return Boolean(state && state.hasMore);
+      return Boolean(state?.hasMore);
     });
 
     const settings = this.getSettings();

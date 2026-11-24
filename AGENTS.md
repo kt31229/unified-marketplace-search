@@ -14,4 +14,4 @@ Single-context layout (`GLOSSARY.md` and `docs/adr/` at the repo root). See `doc
 
 ### Local environment
 
-Windows worktree, sandbox, and live-smoke gotchas. See `docs/agents/local-env.md`.
+Windows shell tools, verification command (`npm run check`), worktree, sandbox, and live-smoke gotchas. See `docs/agents/local-env.md`.
