@@ -1,8 +1,10 @@
 import {
+  ConditionTierSchema,
   DEFAULT_FACEBOOK_CITY_HUBS,
   MARKETPLACE_IDS,
   MarketplaceIdSchema,
   type AppSettings,
+  type ConditionTier,
   type MarketplaceId,
   type MarketplaceRunStatus,
   type UnifiedFilter,
@@ -23,6 +25,10 @@ export interface ParsedLiveSmokeArgs {
   optedIn: boolean;
   query: string;
   marketplaces: MarketplaceId[];
+  priceMin: number | null;
+  priceMax: number | null;
+  conditions: ConditionTier[];
+  isolated: boolean;
 }
 
 export type LiveSmokeOutcome = 'pass' | 'fail' | 'skipped';
@@ -138,6 +144,44 @@ function parseMarketplaceList(raw: string): MarketplaceId[] {
   return deduped;
 }
 
+function parsePriceArg(flag: string, raw: string): number {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error(`${flag} must be a non-negative number.`);
+  }
+  const num = Number(trimmed);
+  if (!Number.isFinite(num) || num < 0) {
+    throw new Error(`Invalid ${flag} value "${raw}". Expected a non-negative number.`);
+  }
+  return num;
+}
+
+function parseConditionList(raw: string): ConditionTier[] {
+  const parts = raw
+    .split(',')
+    .map((p) => p.trim().toLowerCase())
+    .filter((p) => p.length > 0);
+  if (parts.length === 0) {
+    throw new Error('At least one condition tier must be provided to --condition.');
+  }
+
+  const deduped: ConditionTier[] = [];
+  const seen = new Set<ConditionTier>();
+  for (const part of parts) {
+    const parsed = ConditionTierSchema.safeParse(part);
+    if (!parsed.success) {
+      throw new Error(
+        `Invalid condition "${part}". Expected one of: new, like_new, good, fair, poor.`,
+      );
+    }
+    if (!seen.has(parsed.data)) {
+      seen.add(parsed.data);
+      deduped.push(parsed.data);
+    }
+  }
+  return deduped;
+}
+
 export function parseLiveSmokeArgs(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -146,6 +190,10 @@ export function parseLiveSmokeArgs(
   let yesFlag = false;
   let query = DEFAULT_LIVE_SMOKE_QUERY;
   let marketplaces: MarketplaceId[] = [...MARKETPLACE_IDS];
+  let priceMin: number | null = null;
+  let priceMax: number | null = null;
+  let conditions: ConditionTier[] = [];
+  let isolated = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] ?? '';
@@ -153,6 +201,8 @@ export function parseLiveSmokeArgs(
       help = true;
     } else if (arg === '--yes' || arg === '-y') {
       yesFlag = true;
+    } else if (arg === '--isolated') {
+      isolated = true;
     } else if (arg.startsWith('--query=')) {
       query = arg.slice('--query='.length).trim();
     } else if (arg === '--query') {
@@ -161,6 +211,18 @@ export function parseLiveSmokeArgs(
       marketplaces = parseMarketplaceList(arg.slice('--marketplaces='.length));
     } else if (arg === '--marketplaces') {
       marketplaces = parseMarketplaceList(argv[++i] ?? '');
+    } else if (arg.startsWith('--price-min=')) {
+      priceMin = parsePriceArg('--price-min', arg.slice('--price-min='.length));
+    } else if (arg === '--price-min') {
+      priceMin = parsePriceArg('--price-min', argv[++i] ?? '');
+    } else if (arg.startsWith('--price-max=')) {
+      priceMax = parsePriceArg('--price-max', arg.slice('--price-max='.length));
+    } else if (arg === '--price-max') {
+      priceMax = parsePriceArg('--price-max', argv[++i] ?? '');
+    } else if (arg.startsWith('--condition=')) {
+      conditions = parseConditionList(arg.slice('--condition='.length));
+    } else if (arg === '--condition') {
+      conditions = parseConditionList(argv[++i] ?? '');
     } else {
       throw new Error(`Unknown live-smoke argument: ${arg}`);
     }
@@ -168,6 +230,10 @@ export function parseLiveSmokeArgs(
 
   if (!query) {
     throw new Error('Live-smoke --query must be a non-empty string.');
+  }
+
+  if (priceMin !== null && priceMax !== null && priceMin > priceMax) {
+    throw new Error(`Invalid price range: --price-min (${priceMin}) cannot exceed --price-max (${priceMax}).`);
   }
 
   const envOptIn =
@@ -187,6 +253,10 @@ export function parseLiveSmokeArgs(
     optedIn,
     query,
     marketplaces,
+    priceMin,
+    priceMax,
+    conditions,
+    isolated,
   };
 }
 
@@ -196,6 +266,9 @@ export interface RunLiveSmokeOptions {
   adapters: Record<MarketplaceId, MarketplaceAdapter>;
   settings: AppSettings;
   ebayCredentials: RawEbayCredentials;
+  priceMin?: number | null;
+  priceMax?: number | null;
+  conditions?: ConditionTier[];
   pacingCooldownMs?: number;
   sleep?: SleepFn;
   clock?: ClockFn;
@@ -214,16 +287,23 @@ function defaultSmokeSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function buildSmokeFilters(settings: AppSettings): UnifiedFilter {
+function buildSmokeFilters(
+  settings: AppSettings,
+  overrides: {
+    priceMin?: number | null;
+    priceMax?: number | null;
+    conditions?: ConditionTier[];
+  } = {},
+): UnifiedFilter {
   const firstEnabledHub =
     settings.homeFacebookCitySlug?.trim() ||
     settings.facebookCityHubs.find((h) => h.enabled)?.slug ||
     DEFAULT_FACEBOOK_CITY_HUBS[0]!.slug;
 
   return {
-    priceMin: null,
-    priceMax: null,
-    conditions: [],
+    priceMin: overrides.priceMin ?? null,
+    priceMax: overrides.priceMax ?? null,
+    conditions: overrides.conditions ?? [],
     fulfillment: 'any',
     facebookLocationSlugs: [firstEnabledHub],
     facebookRadiusMiles: settings.facebookRadiusMiles ?? 500,
@@ -253,7 +333,11 @@ export async function runLiveSmoke(
   const sleep = options.sleep ?? defaultSmokeSleep;
   const pacingCooldownMs = options.pacingCooldownMs ?? DEFAULT_SMOKE_PACING_COOLDOWN_MS;
   const extraSecrets = [options.ebayCredentials.clientSecret, options.ebayCredentials.clientId];
-  const unifiedFilters = buildSmokeFilters(options.settings);
+  const unifiedFilters = buildSmokeFilters(options.settings, {
+    priceMin: options.priceMin,
+    priceMax: options.priceMax,
+    conditions: options.conditions,
+  });
 
   const startedAtMs = clock();
   const startedAt = new Date(startedAtMs).toISOString();

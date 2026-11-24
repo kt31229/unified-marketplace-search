@@ -19,7 +19,12 @@ import type {
   BrowserSessionManager,
 } from '../browser-session-manager.ts';
 import { applyPostFilters } from './post-filter.ts';
-import { createTimeoutRace, defaultSleep, isTimeoutError } from './utils.ts';
+import {
+  createTimeoutRace,
+  defaultSleep,
+  isTimeoutError,
+  summarizeUpstreamError,
+} from './utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -367,11 +372,13 @@ function findFeedUnitsInTree(node: unknown): z.infer<typeof FacebookFeedUnitsSch
 function extractRelayFeedFromHtml(html: string): {
   feedUnits: z.infer<typeof FacebookFeedUnitsSchema> | null;
   hasAuthError: boolean;
+  upstreamError: string | null;
 } {
   const scriptRegex =
     /<script\b[^>]*\btype=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
   let hasAuthError = false;
+  let upstreamError: string | null = null;
 
   while ((match = scriptRegex.exec(html)) !== null) {
     const rawJson = match[1]?.trim();
@@ -387,13 +394,16 @@ function extractRelayFeedFromHtml(html: string): {
     if (hasRelayAuthError(parsed)) {
       hasAuthError = true;
     }
+    if (!upstreamError) {
+      upstreamError = summarizeUpstreamError(parsed);
+    }
     const found = findFeedUnitsInTree(parsed);
     if (found) {
-      return { feedUnits: found, hasAuthError };
+      return { feedUnits: found, hasAuthError, upstreamError };
     }
   }
 
-  return { feedUnits: null, hasAuthError };
+  return { feedUnits: null, hasAuthError, upstreamError };
 }
 
 function normalizeFacebookEdge(
@@ -775,7 +785,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
             const html = await page.content().catch(() => '');
             const currentUrl = page.url();
 
-            const { feedUnits, hasAuthError } = extractRelayFeedFromHtml(html);
+            const { feedUnits, hasAuthError, upstreamError } = extractRelayFeedFromHtml(html);
 
             if (hasAuthError || isChallengeUrlOrDom(currentUrl, title, html)) {
               return {
@@ -790,7 +800,9 @@ export class FacebookAdapter implements MarketplaceAdapter {
               return {
                 ok: false as const,
                 runStatus: 'parse_error' as const,
-                errorMessage: `Could not locate Facebook Marketplace Relay JSON for ${hub.label}.`,
+                errorMessage: upstreamError
+                  ? `Could not locate Facebook Marketplace Relay JSON for ${hub.label} (${upstreamError}).`
+                  : `Could not locate Facebook Marketplace Relay JSON for ${hub.label}.`,
               };
             }
 
@@ -1146,10 +1158,15 @@ export class FacebookAdapter implements MarketplaceAdapter {
             }
 
             if (!feedUnits) {
+              const upstreamError = payloads
+                .map((payload) => summarizeUpstreamError(payload))
+                .find((detail): detail is string => Boolean(detail));
               return {
                 ok: false as const,
                 runStatus: 'parse_error' as const,
-                errorMessage: `Unrecognized CometMarketplaceSearchContentPaginationQuery response for ${hub.label}.`,
+                errorMessage: upstreamError
+                  ? `Unrecognized CometMarketplaceSearchContentPaginationQuery response for ${hub.label} (${upstreamError}).`
+                  : `Unrecognized CometMarketplaceSearchContentPaginationQuery response for ${hub.label}.`,
               };
             }
 

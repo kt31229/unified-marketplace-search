@@ -1013,4 +1013,41 @@ describe('MercariAdapter', () => {
       await browserSessionManager.shutdown();
     }
   });
+
+  it('surfaces upstream Mercari GraphQL error code and message when searchFacetQuery returns errors', async () => {
+    const scripted = createScriptedMercariTransport({
+      initialFacetResponse: {
+        status: 200,
+        body: {
+          errors: [
+            {
+              message: 'Invalid sort parameter',
+              extensions: { code: 'BAD_USER_INPUT' },
+            },
+          ],
+        },
+      },
+    });
+    const bsm = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: scripted.transport,
+    });
+    const adapter = createMercariAdapter({ browserSessionManager: bsm });
+    const filters = createDefaultUnifiedFilter();
+    const translation = adapter.translateFilters('jacket', filters, 'relevance', makeContext());
+
+    const res = await adapter.executeInitial({
+      keywords: 'jacket',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: makeContext(),
+    });
+
+    expect(res.runStatus).toBe('parse_error');
+    expect(res.errorMessage).toContain('BAD_USER_INPUT');
+    expect(res.errorMessage).toContain('Invalid sort parameter');
+    await bsm.shutdown();
+  });
 });

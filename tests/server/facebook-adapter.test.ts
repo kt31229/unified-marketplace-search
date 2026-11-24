@@ -1372,4 +1372,43 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     expect(lmAbort.listings.map((l) => l.marketplaceListingId)).toEqual(['seattle-p2']);
     await bsm3.shutdown();
   });
+
+  it('surfaces upstream non-auth Relay error details when feed_units is missing', async () => {
+    const scripted = createScriptedFacebookTransport({
+      stepsByUrl: () => ({
+        html: wrapRelayHtml({
+          errors: [
+            {
+              code: 1675012,
+              summary: 'Rate limit exceeded',
+            },
+          ],
+        }),
+      }),
+    });
+    const bsm = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: scripted.transport,
+    });
+    const adapter = createFacebookAdapter({ browserSessionManager: bsm, sleep: async () => {} });
+    const filters = {
+      ...createDefaultUnifiedFilter(),
+      facebookLocationSlugs: ['seattle'],
+    };
+    const translation = adapter.translateFilters('jacket', filters, 'relevance', makeContext());
+
+    const res = await adapter.executeInitial({
+      keywords: 'jacket',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: makeContext(),
+    });
+
+    expect(res.runStatus).toBe('parse_error');
+    expect(res.errorMessage).toContain('1675012');
+    expect(res.errorMessage).toContain('Rate limit exceeded');
+    await bsm.shutdown();
+  });
 });

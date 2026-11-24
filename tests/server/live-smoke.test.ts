@@ -31,6 +31,10 @@ describe('parseLiveSmokeArgs & opt-in guard', () => {
       optedIn: true,
       query: 'vintage camera',
       marketplaces: ['ebay', 'facebook'],
+      priceMin: null,
+      priceMax: null,
+      conditions: [],
+      isolated: false,
     });
 
     const withNpmLifecycle = parseLiveSmokeArgs(
@@ -42,14 +46,46 @@ describe('parseLiveSmokeArgs & opt-in guard', () => {
       optedIn: true,
       query: 'leather boots',
       marketplaces: ['poshmark', 'mercari'],
+      priceMin: null,
+      priceMax: null,
+      conditions: [],
+      isolated: false,
+    });
+
+    const withFilters = parseLiveSmokeArgs(
+      [
+        '--yes',
+        '--price-min=25',
+        '--price-max',
+        '100',
+        '--condition=new,like_new,new',
+        '--isolated',
+      ],
+      {},
+    );
+    expect(withFilters).toEqual({
+      help: false,
+      optedIn: true,
+      query: 'patagonia jacket',
+      marketplaces: ['ebay', 'poshmark', 'mercari', 'facebook'],
+      priceMin: 25,
+      priceMax: 100,
+      conditions: ['new', 'like_new'],
+      isolated: true,
     });
   });
 
-  it('rejects unknown Marketplace names or empty queries', () => {
+  it('rejects unknown Marketplace names, empty queries, invalid prices, or invalid conditions', () => {
     expect(() =>
       parseLiveSmokeArgs(['--yes', '--marketplaces=ebay,craigslist'], {}),
     ).toThrow(/marketplace/i);
     expect(() => parseLiveSmokeArgs(['--yes', '--query=   '], {})).toThrow(/query/i);
+    expect(() => parseLiveSmokeArgs(['--yes', '--price-min=-5'], {})).toThrow(/price-min/i);
+    expect(() => parseLiveSmokeArgs(['--yes', '--price-max=abc'], {})).toThrow(/price-max/i);
+    expect(() => parseLiveSmokeArgs(['--yes', '--price-min=120', '--price-max=80'], {})).toThrow(
+      /cannot exceed/i,
+    );
+    expect(() => parseLiveSmokeArgs(['--yes', '--condition=mint'], {})).toThrow(/condition/i);
   });
 });
 
@@ -319,5 +355,58 @@ describe('runLiveSmoke paced orchestration', () => {
     expect(result.report).not.toContain('ebay-secret-abcd');
     expect(result.report).not.toContain('999888777');
     expect(result.report).toContain('[REDACTED]');
+  });
+
+  it('forwards optional priceMin, priceMax, and conditions into adapter unifiedFilters', async () => {
+    const poshmark = makeFakeAdapter('poshmark', {
+      translateFilters: vi.fn<MarketplaceAdapter['translateFilters']>((keywords, filters) => {
+        expect(filters.priceMin).toBe(20);
+        expect(filters.priceMax).toBe(100);
+        expect(filters.conditions).toEqual(['like_new', 'good']);
+        return {
+          marketplace: 'poshmark',
+          status: 'exact',
+          notices: [],
+          nativeSearchUrl: `https://example.com/poshmark?q=${encodeURIComponent(keywords)}`,
+        };
+      }),
+      executeInitial: vi.fn<MarketplaceAdapter['executeInitial']>(async (params) => {
+        expect(params.unifiedFilters.priceMin).toBe(20);
+        expect(params.unifiedFilters.priceMax).toBe(100);
+        expect(params.unifiedFilters.conditions).toEqual(['like_new', 'good']);
+        return {
+          runStatus: 'success',
+          listings: [makeListing('poshmark', 'p1', 'Filtered Jacket', 65)],
+          droppedMalformedCount: 0,
+          hasMore: false,
+        };
+      }),
+    });
+
+    const result = await runLiveSmoke({
+      query: 'jacket',
+      marketplaces: ['poshmark'],
+      priceMin: 20,
+      priceMax: 100,
+      conditions: ['like_new', 'good'],
+      adapters: {
+        ebay: makeFakeAdapter('ebay'),
+        poshmark,
+        mercari: makeFakeAdapter('mercari'),
+        facebook: makeFakeAdapter('facebook'),
+      },
+      settings: makeSettings(),
+      ebayCredentials: {
+        configured: false,
+        origin: 'none',
+        clientId: null,
+        clientSecret: null,
+      },
+      sleep: async () => {},
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(poshmark.translateFilters).toHaveBeenCalledTimes(1);
+    expect(poshmark.executeInitial).toHaveBeenCalledTimes(1);
   });
 });

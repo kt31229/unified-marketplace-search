@@ -13,7 +13,7 @@ import type {
   BrowserSessionManager,
 } from '../browser-session-manager.ts';
 import { applyPostFilters } from './post-filter.ts';
-import { createTimeoutRace, isTimeoutError } from './utils.ts';
+import { createTimeoutRace, formatErrorWithUpstreamDetail, isTimeoutError } from './utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -250,7 +250,10 @@ function normalizeMercariEnvelope(
       listings: [],
       droppedMalformedCount: 0,
       hasMore: false,
-      errorMessage: 'Unrecognized Mercari searchFacetQuery response envelope.',
+      errorMessage: formatErrorWithUpstreamDetail(
+        'Unrecognized Mercari searchFacetQuery response envelope.',
+        rawBody,
+      ),
     };
   }
 
