@@ -11,3 +11,7 @@ Default five-role triage vocabulary (`needs-triage`, `needs-info`, `ready-for-ag
 ### Domain docs
 
 Single-context layout (`GLOSSARY.md` and `docs/adr/` at the repo root). See `docs/agents/domain.md`.
+
+### Local environment
+
+Windows worktree, sandbox, and live-smoke gotchas. See `docs/agents/local-env.md`.
