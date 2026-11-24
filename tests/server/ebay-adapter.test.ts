@@ -490,4 +490,44 @@ describe('eBay Buy Browse API adapter — OAuth, execution, normalization, and p
     expect(res.runStatus).toBe('timeout');
     expect(res.errorMessage).toMatch(/timed out/i);
   });
+
+  it('surfaces upstream eBay errorId and message on non-OK HTTP responses', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === 'https://api.ebay.com/identity/v1/oauth2/token') {
+        return new Response(JSON.stringify({ access_token: 'tok-err', expires_in: 7200 }), {
+          status: 200,
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          errors: [
+            {
+              errorId: 12001,
+              message: 'Invalid filter value',
+            },
+          ],
+        }),
+        { status: 400 },
+      );
+    });
+
+    const adapter = createEbayAdapter({ fetchImpl: fetchMock });
+    const settings = createDefaultAppSettings();
+    const filters = createDefaultUnifiedFilter(settings);
+    const translation = adapter.translateFilters('camera', filters, 'relevance', { settings });
+
+    const res = await adapter.executeInitial({
+      keywords: 'camera',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: { settings, ebayCredentials: VALID_CREDS },
+    });
+
+    expect(res.runStatus).toBe('network_error');
+    expect(res.errorMessage).toContain('HTTP 400');
+    expect(res.errorMessage).toContain('12001');
+    expect(res.errorMessage).toContain('Invalid filter value');
+  });
 });

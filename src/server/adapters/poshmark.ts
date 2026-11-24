@@ -11,7 +11,7 @@ import {
 } from '../../shared/index.ts';
 import type { BrowserPageHandle, BrowserSessionManager } from '../browser-session-manager.ts';
 import { applyPostFilters } from './post-filter.ts';
-import { createTimeoutRace, isTimeoutError } from './utils.ts';
+import { createTimeoutRace, formatErrorWithUpstreamDetail, isTimeoutError } from './utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -396,7 +396,10 @@ function normalizePoshmarkEnvelope(
       listings: [],
       droppedMalformedCount: 0,
       hasMore: false,
-      errorMessage: 'Unrecognized Poshmark /vm-rest/posts response envelope.',
+      errorMessage: formatErrorWithUpstreamDetail(
+        'Unrecognized Poshmark /vm-rest/posts response envelope.',
+        rawBody,
+      ),
     };
   }
 
@@ -645,7 +648,10 @@ export class PoshmarkAdapter implements MarketplaceAdapter {
                       listings: [],
                       droppedMalformedCount: 0,
                       hasMore: false,
-                      errorMessage: `Poshmark /vm-rest/posts returned HTTP ${fallback.status}.`,
+                      errorMessage: formatErrorWithUpstreamDetail(
+                        `Poshmark /vm-rest/posts returned HTTP ${fallback.status}.`,
+                        fallback.body,
+                      ),
                     };
                   }
                 } else {
@@ -654,7 +660,10 @@ export class PoshmarkAdapter implements MarketplaceAdapter {
                     listings: [],
                     droppedMalformedCount: 0,
                     hasMore: false,
-                    errorMessage: `Poshmark /vm-rest/posts returned HTTP ${fetchResult.status}.`,
+                    errorMessage: formatErrorWithUpstreamDetail(
+                      `Poshmark /vm-rest/posts returned HTTP ${fetchResult.status}.`,
+                      fetchResult.body,
+                    ),
                   };
                 }
               } else {

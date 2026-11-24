@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createEbayAdapter } from '../src/server/adapters/ebay.ts';
 import { createFacebookAdapter } from '../src/server/adapters/facebook.ts';
 import { createMercariAdapter } from '../src/server/adapters/mercari.ts';
@@ -21,6 +24,10 @@ function printHelp(): void {
       '  --yes, -y                 Explicitly opt in to live Marketplace requests',
       '  --query=<keywords>        Search query (default: "patagonia jacket")',
       '  --marketplaces=<csv>      Comma-separated: ebay,poshmark,mercari,facebook',
+      '  --price-min=<usd>         Optional minimum Unified Filter price in USD',
+      '  --price-max=<usd>         Optional maximum Unified Filter price in USD',
+      '  --condition=<csv>         Comma-separated: new,like_new,good,fair,poor',
+      '  --isolated                Use a temporary data/profile dir to avoid profile locks',
       '  --help, -h                Show this help message',
     ].join('\n'),
   );
@@ -38,7 +45,10 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  const dataDir = resolveDataDir({ env: process.env });
+  const tempDataDir = parsed.isolated
+    ? fs.mkdtempSync(path.join(os.tmpdir(), 'ums-live-smoke-'))
+    : null;
+  const dataDir = tempDataDir ?? resolveDataDir({ env: process.env });
   ensureBaseDirectories(dataDir);
 
   const database = openDatabase(dataDir);
@@ -55,6 +65,9 @@ async function main(): Promise<number> {
     const result = await runLiveSmoke({
       query: parsed.query,
       marketplaces: parsed.marketplaces,
+      priceMin: parsed.priceMin,
+      priceMax: parsed.priceMax,
+      conditions: parsed.conditions,
       settings,
       ebayCredentials,
       adapters: {
@@ -70,6 +83,13 @@ async function main(): Promise<number> {
   } finally {
     await browserSessionManager.shutdown();
     database.close();
+    if (tempDataDir) {
+      try {
+        fs.rmSync(tempDataDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors for temporary smoke profile
+      }
+    }
   }
 }
 

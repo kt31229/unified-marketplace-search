@@ -578,4 +578,42 @@ describe('PoshmarkAdapter', () => {
     expect(slowScript.gotoUrls).toHaveLength(1); // 0 auto-retries
     await bsm2.shutdown();
   });
+
+  it('surfaces upstream Poshmark errorType and statusCode when HTTP 200 returns an error envelope', async () => {
+    const upstreamErrorScript = createScriptedPoshmarkTransport({
+      evaluateHandler: async () => ({
+        status: 200,
+        ok: true,
+        contentType: 'application/json',
+        isChallengeDom: false,
+        body: {
+          error: {
+            errorType: 'SearchError',
+            statusCode: 502,
+          },
+        },
+      }),
+    });
+    const bsm = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: upstreamErrorScript.transport,
+    });
+    const adapter = createPoshmarkAdapter({ browserSessionManager: bsm });
+    const filters = createDefaultUnifiedFilter();
+    const translation = adapter.translateFilters('jacket', filters, 'relevance', makeContext());
+
+    const res = await adapter.executeInitial({
+      keywords: 'jacket',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context: makeContext(),
+    });
+
+    expect(res.runStatus).toBe('parse_error');
+    expect(res.errorMessage).toContain('SearchError');
+    expect(res.errorMessage).toContain('502');
+    await bsm.shutdown();
+  });
 });

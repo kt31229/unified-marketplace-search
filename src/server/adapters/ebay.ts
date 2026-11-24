@@ -12,6 +12,7 @@ import {
 } from '../../shared/index.ts';
 import type { RawEbayCredentials } from '../secrets.ts';
 import { applyPostFilters } from './post-filter.ts';
+import { formatErrorWithUpstreamDetail } from './utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -573,12 +574,16 @@ export class EbayAdapter implements MarketplaceAdapter {
     }
 
     if (!response.ok) {
+      const errBody = await response.json().catch(() => null);
       return {
         runStatus: 'network_error',
         listings: [],
         droppedMalformedCount: 0,
         hasMore: false,
-        errorMessage: `eBay API returned HTTP ${response.status}.`,
+        errorMessage: formatErrorWithUpstreamDetail(
+          `eBay API returned HTTP ${response.status}.`,
+          errBody,
+        ),
       };
     }
 
@@ -602,7 +607,10 @@ export class EbayAdapter implements MarketplaceAdapter {
         listings: [],
         droppedMalformedCount: 0,
         hasMore: false,
-        errorMessage: 'Unrecognized eBay Buy Browse API response envelope.',
+        errorMessage: formatErrorWithUpstreamDetail(
+          'Unrecognized eBay Buy Browse API response envelope.',
+          rawJson,
+        ),
       };
     }
 
