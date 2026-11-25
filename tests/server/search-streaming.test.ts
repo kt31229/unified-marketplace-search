@@ -598,4 +598,296 @@ describe('Search streaming orchestrator & HTTP API', () => {
     ).facebook;
     expect(fbStatusLatched?.runStatus).toBe('challenge_or_auth_required');
   });
+
+  it('auto-retries retryable failures with configured delay, emits live retry status, and records diagnostics', async () => {
+    const sleepCalls: number[] = [];
+    const sleepImpl = async (ms: number) => {
+      sleepCalls.push(ms);
+    };
+
+    let mercariAttempt = 0;
+    const mercariAdapter: MarketplaceAdapter = {
+      id: 'mercari',
+      translateFilters(keywords) {
+        return {
+          marketplace: 'mercari',
+          status: 'exact',
+          notices: [],
+          nativeSearchUrl: `https://www.mercari.com/search/?keyword=${encodeURIComponent(keywords)}`,
+        };
+      },
+      async executeInitial() {
+        mercariAttempt += 1;
+        if (mercariAttempt === 1) {
+          return {
+            runStatus: 'challenge_or_auth_required',
+            listings: [],
+            droppedMalformedCount: 0,
+            hasMore: false,
+            errorMessage: 'Cold start challenge',
+          };
+        }
+        return {
+          runStatus: 'success',
+          listings: [makeFakeListing('mercari', 'mc-retry-1', 45, 1)],
+          droppedMalformedCount: 0,
+          hasMore: true,
+          nextCursor: { page: 2 },
+        };
+      },
+      async loadMore() {
+        return {
+          runStatus: 'timeout',
+          listings: [],
+          droppedMalformedCount: 0,
+          hasMore: false,
+          errorMessage: 'Timed out on page 2',
+        };
+      },
+    };
+
+    const ebayAdapter = createUnconfiguredAdapter('ebay');
+    const poshmarkAdapter: MarketplaceAdapter = {
+      id: 'poshmark',
+      translateFilters(keywords) {
+        return {
+          marketplace: 'poshmark',
+          status: 'exact',
+          notices: [],
+          nativeSearchUrl: `https://poshmark.com/search?query=${encodeURIComponent(keywords)}`,
+        };
+      },
+      async executeInitial() {
+        return {
+          runStatus: 'empty',
+          listings: [],
+          droppedMalformedCount: 0,
+          hasMore: false,
+        };
+      },
+      async loadMore() {
+        return {
+          runStatus: 'empty',
+          listings: [],
+          droppedMalformedCount: 0,
+          hasMore: false,
+        };
+      },
+    };
+
+    let poshmarkLoadMoreAttempt = 0;
+    poshmarkAdapter.loadMore = async () => {
+      poshmarkLoadMoreAttempt += 1;
+      if (poshmarkLoadMoreAttempt === 1) {
+        return {
+          runStatus: 'network_error',
+          listings: [],
+          droppedMalformedCount: 0,
+          hasMore: false,
+          errorMessage: 'Transient 502',
+        };
+      }
+      return {
+        runStatus: 'success',
+        listings: [makeFakeListing('poshmark', 'pm-p2-1', 30, 1)],
+        droppedMalformedCount: 0,
+        hasMore: false,
+      };
+    };
+
+    const instance = createApp({
+      dataDir: createTempDataDir(),
+      env: {},
+      sleep: sleepImpl,
+      adapters: {
+        mercari: mercariAdapter,
+        ebay: ebayAdapter,
+        poshmark: poshmarkAdapter,
+      },
+    });
+    activeApps.push(instance);
+
+    const res = await instance.app.request('/api/searches/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keywords: 'patagonia',
+        unifiedFilters: createDefaultUnifiedFilter(),
+        marketplaces: ['mercari', 'ebay', 'poshmark'],
+        sortOrder: 'relevance',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const events = await readSseEvents(res);
+
+    // Mercari slept 2000ms once and emitted live retryAttempt/retryMax
+    expect(sleepCalls).toEqual([2000]);
+    expect(mercariAttempt).toBe(2);
+
+    const retryStatusEvents = events.filter(
+      (e) =>
+        e.event === 'marketplace_status' &&
+        (e.data.status as { marketplace: string; retryAttempt?: number }).marketplace === 'mercari' &&
+        (e.data.status as { retryAttempt?: number }).retryAttempt === 1,
+    );
+    expect(retryStatusEvents.length).toBeGreaterThanOrEqual(1);
+
+    const complete = events.find((e) => e.event === 'run_complete');
+    const statuses = complete?.data.statuses as Record<
+      string,
+      { runStatus: string; loadedCount: number; notices: string[]; errorMessage?: string | null }
+    >;
+    expect(statuses.mercari?.runStatus).toBe('success');
+    expect(statuses.mercari?.loadedCount).toBe(1);
+    expect(statuses.mercari?.notices).toContain('Succeeded after 1 automatic retry.');
+    // unconfigured & empty are never retried
+    expect(statuses.ebay?.runStatus).toBe('unconfigured');
+    expect(statuses.poshmark?.runStatus).toBe('empty');
+
+    // loadMore also retries Mercari (fails after 1 retry)
+    const runId = String(events.find((e) => e.event === 'run_started')?.data.searchRunId);
+    const lmRes = await instance.app.request(`/api/searches/${runId}/load-more`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketplace: 'mercari' }),
+    });
+    const lmEvents = await readSseEvents(lmRes);
+    const lmComplete = lmEvents.find((e) => e.event === 'run_complete');
+    const lmMercari = (
+      lmComplete?.data.statuses as Record<string, { runStatus: string; errorMessage?: string | null }>
+    ).mercari;
+    expect(lmMercari?.runStatus).toBe('timeout');
+    expect(lmMercari?.errorMessage).toBe('Failed after 1 automatic retry: Timed out on page 2');
+    expect(sleepCalls).toEqual([2000, 2000]);
+
+    // Manual retryMarketplace does NOT auto-retry
+    mercariAttempt = 0;
+    let manualFailCalls = 0;
+    mercariAdapter.executeInitial = async () => {
+      manualFailCalls += 1;
+      return {
+        runStatus: 'parse_error',
+        listings: [],
+        droppedMalformedCount: 0,
+        hasMore: false,
+        errorMessage: 'Bad JSON',
+      };
+    };
+    const manualRes = await instance.app.request(`/api/searches/${runId}/retry/mercari`, {
+      method: 'POST',
+    });
+    const manualEvents = await readSseEvents(manualRes);
+    expect(manualFailCalls).toBe(1);
+    expect(sleepCalls).toEqual([2000, 2000]);
+    const manualComplete = manualEvents.find((e) => e.event === 'run_complete');
+    const manualMercari = (
+      manualComplete?.data.statuses as Record<string, { runStatus: string; errorMessage?: string | null }>
+    ).mercari;
+    expect(manualMercari?.errorMessage).toBe('Bad JSON');
+  });
+
+  it('respects per-Marketplace retry disable/custom bounds and aborts cleanly during retry wait', async () => {
+    const sleepCalls: number[] = [];
+    let mercariCalls = 0;
+    const mercariAdapter: MarketplaceAdapter = {
+      id: 'mercari',
+      translateFilters(keywords) {
+        return {
+          marketplace: 'mercari',
+          status: 'exact',
+          notices: [],
+          nativeSearchUrl: `https://www.mercari.com/search/?keyword=${encodeURIComponent(keywords)}`,
+        };
+      },
+      async executeInitial() {
+        mercariCalls += 1;
+        return {
+          runStatus: 'network_error',
+          listings: [],
+          droppedMalformedCount: 0,
+          hasMore: false,
+          errorMessage: 'Down',
+        };
+      },
+      async loadMore() {
+        return { runStatus: 'empty', listings: [], droppedMalformedCount: 0, hasMore: false };
+      },
+    };
+
+    const instance = createApp({
+      dataDir: createTempDataDir(),
+      env: {},
+      sleep: async (ms, signal) => {
+        sleepCalls.push(ms);
+        if (signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
+      },
+      adapters: { mercari: mercariAdapter },
+    });
+    activeApps.push(instance);
+
+    // Disable Mercari retries -> 1 attempt, 0 sleeps
+    const current = (await (await instance.app.request('/api/settings')).json()).settings;
+    await instance.app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        settings: {
+          retrySettings: {
+            ...current.retrySettings,
+            mercari: { enabled: false, maxRetries: 3, delaySeconds: 1 },
+          },
+        },
+      }),
+    });
+
+    const resDisabled = await instance.app.request('/api/searches/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keywords: 'jacket',
+        unifiedFilters: createDefaultUnifiedFilter(),
+        marketplaces: ['mercari'],
+        sortOrder: 'relevance',
+      }),
+    });
+    await readSseEvents(resDisabled);
+    expect(mercariCalls).toBe(1);
+    expect(sleepCalls).toEqual([]);
+
+    // Enable 2 retries with 0.5s delay (500ms) -> 3 attempts, 2 sleeps of 500ms
+    mercariCalls = 0;
+    await instance.app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        settings: {
+          retrySettings: {
+            ...current.retrySettings,
+            mercari: { enabled: true, maxRetries: 2, delaySeconds: 0.5 },
+          },
+        },
+      }),
+    });
+
+    const resCustom = await instance.app.request('/api/searches/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keywords: 'jacket',
+        unifiedFilters: createDefaultUnifiedFilter(),
+        marketplaces: ['mercari'],
+        sortOrder: 'relevance',
+      }),
+    });
+    const customEvents = await readSseEvents(resCustom);
+    expect(mercariCalls).toBe(3);
+    expect(sleepCalls).toEqual([500, 500]);
+    const customComplete = customEvents.find((e) => e.event === 'run_complete');
+    const customMercari = (
+      customComplete?.data.statuses as Record<string, { errorMessage?: string | null }>
+    ).mercari;
+    expect(customMercari?.errorMessage).toBe('Failed after 2 automatic retries: Down');
+  });
 });

@@ -5,6 +5,7 @@ import {
   AppSettingsSchema,
   WatchlistEntrySchema,
   createDefaultAppSettings,
+  createDefaultMarketplaceRetrySettings,
   sortWatchlistEntries,
   type AppSettings,
   type MarketplaceId,
@@ -108,6 +109,20 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    apply: (db) => {
+      db.exec(`ALTER TABLE app_settings ADD COLUMN retry_settings_json TEXT;`);
+      const defaults = JSON.stringify(createDefaultMarketplaceRetrySettings());
+      const stmt = db.prepare(`
+        UPDATE app_settings
+        SET retry_settings_json = :retrySettingsJson
+        WHERE retry_settings_json IS NULL
+      `);
+      stmt.setAllowBareNamedParameters(true);
+      stmt.run({ retrySettingsJson: defaults });
+    },
+  },
 ];
 
 export interface AppSettingsRow {
@@ -117,6 +132,7 @@ export interface AppSettingsRow {
   home_facebook_city_slug: string | null;
   facebook_radius_miles: number;
   facebook_city_hubs_json: string;
+  retry_settings_json: string | null;
 }
 
 export class SettingsRepository {
@@ -131,7 +147,8 @@ export class SettingsRepository {
           default_local_pickup_radius_miles,
           home_facebook_city_slug,
           facebook_radius_miles,
-          facebook_city_hubs_json
+          facebook_city_hubs_json,
+          retry_settings_json
         FROM app_settings
         WHERE id = 1`,
       )
@@ -148,6 +165,9 @@ export class SettingsRepository {
       homeFacebookCitySlug: row.home_facebook_city_slug,
       facebookRadiusMiles: row.facebook_radius_miles,
       facebookCityHubs: JSON.parse(row.facebook_city_hubs_json),
+      retrySettings: row.retry_settings_json
+        ? JSON.parse(row.retry_settings_json)
+        : createDefaultMarketplaceRetrySettings(),
     });
   }
 
@@ -162,6 +182,9 @@ export class SettingsRepository {
         partial.homeFacebookCitySlug === ''
           ? null
           : (partial.homeFacebookCitySlug ?? current.homeFacebookCitySlug),
+      retrySettings: partial.retrySettings
+        ? { ...current.retrySettings, ...partial.retrySettings }
+        : current.retrySettings,
     });
 
     const stmt = this.db.prepare(`
@@ -173,6 +196,7 @@ export class SettingsRepository {
         home_facebook_city_slug = :homeFacebookCitySlug,
         facebook_radius_miles = :facebookRadiusMiles,
         facebook_city_hubs_json = :facebookCityHubsJson,
+        retry_settings_json = :retrySettingsJson,
         updated_at = :updatedAt
       WHERE id = 1
     `);
@@ -184,6 +208,7 @@ export class SettingsRepository {
       homeFacebookCitySlug: merged.homeFacebookCitySlug,
       facebookRadiusMiles: merged.facebookRadiusMiles,
       facebookCityHubsJson: JSON.stringify(merged.facebookCityHubs),
+      retrySettingsJson: JSON.stringify(merged.retrySettings),
       updatedAt: new Date().toISOString(),
     });
 

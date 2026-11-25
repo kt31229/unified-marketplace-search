@@ -13,7 +13,12 @@ import {
 } from '../shared/index.ts';
 import type { SecretsStore } from './secrets.ts';
 import { applyPostFilters } from './adapters/post-filter.ts';
-import { defaultSleep } from './adapters/utils.ts';
+import {
+  defaultSleep,
+  formatRetryFailureMessage,
+  formatRetrySuccessNotice,
+  isRetryableRunStatus,
+} from './adapters/utils.ts';
 import type {
   AdapterBatchResult,
   AdapterExecutionContext,
@@ -111,6 +116,32 @@ function createInitialStatus(translation: AdapterTranslationResult): Marketplace
   };
 }
 
+function mergeRetryDiagnostics(
+  baseNotices: readonly string[],
+  resultNotices: readonly string[] | undefined,
+  retriesUsed: number,
+  finalRunStatus: MarketplaceStatus['runStatus'],
+  rawErrorMessage: string | null | undefined,
+): { notices: string[]; errorMessage: string | null } {
+  const notices = [...baseNotices];
+  if (resultNotices?.length) {
+    for (const notice of resultNotices) {
+      if (!notices.includes(notice)) {
+        notices.push(notice);
+      }
+    }
+  }
+  let errorMessage = rawErrorMessage ?? null;
+  if (retriesUsed > 0) {
+    if (isRetryableRunStatus(finalRunStatus)) {
+      errorMessage = formatRetryFailureMessage(retriesUsed, errorMessage);
+    } else {
+      notices.push(formatRetrySuccessNotice(retriesUsed));
+    }
+  }
+  return { notices, errorMessage };
+}
+
 function recordFromRunMap<T>(
   entries: Iterable<[MarketplaceId, T]>,
 ): Partial<Record<MarketplaceId, T>> {
@@ -171,6 +202,7 @@ export class SearchOrchestrator {
     marketplace: MarketplaceId,
     emit: SseEmitter,
     settings: AppSettings,
+    allowAutoRetry = false,
   ): AdapterExecutionContext {
     const signal =
       marketplace === 'facebook'
@@ -183,6 +215,7 @@ export class SearchOrchestrator {
       signal,
       clock: this.clock,
       sleep: this.sleep,
+      allowAutoRetry,
       onProgress: (update) => {
         const mpState = run.marketplaces.get(marketplace);
         if (!mpState) {
@@ -231,11 +264,107 @@ export class SearchOrchestrator {
     };
   }
 
+  private async executeWithRetries(params: {
+    run: ActiveRunState;
+    marketplace: MarketplaceId;
+    allowAutoRetry: boolean;
+    settings: AppSettings;
+    emit: SseEmitter;
+    runAttempt: (context: AdapterExecutionContext) => Promise<AdapterBatchResult>;
+  }): Promise<{
+    result: AdapterBatchResult;
+    streamedIncrementally: boolean;
+    retriesUsed: number;
+    abortedDuringSleep: boolean;
+  }> {
+    const retryConfig = params.settings.retrySettings[params.marketplace];
+    const maxRetries =
+      params.marketplace !== 'facebook' && params.allowAutoRetry && retryConfig.enabled
+        ? retryConfig.maxRetries
+        : 0;
+    const delayMs = Math.round(retryConfig.delaySeconds * 1000);
+    const signal =
+      params.marketplace === 'facebook'
+        ? AbortSignal.any([params.run.abortController.signal, params.run.facebookAbortController.signal])
+        : params.run.abortController.signal;
+
+    for (let attempt = 0; ; attempt += 1) {
+      let streamedIncrementally = false;
+      const baseContext = this.buildExecutionContext(
+        params.run,
+        params.marketplace,
+        params.emit,
+        params.settings,
+        params.allowAutoRetry,
+      );
+      const wrappedContext: AdapterExecutionContext = {
+        ...baseContext,
+        onBatch: (batch) => {
+          streamedIncrementally = true;
+          baseContext.onBatch?.(batch);
+        },
+      };
+
+      const result = await params.runAttempt(wrappedContext);
+      if (
+        signal.aborted ||
+        params.run.abortController.signal.aborted ||
+        !isRetryableRunStatus(result.runStatus) ||
+        attempt >= maxRetries
+      ) {
+        return {
+          result,
+          streamedIncrementally,
+          retriesUsed: attempt,
+          abortedDuringSleep: false,
+        };
+      }
+
+      const mpState = params.run.marketplaces.get(params.marketplace);
+      if (mpState) {
+        mpState.status = {
+          ...mpState.status,
+          runStatus: 'running',
+          retryAttempt: attempt + 1,
+          retryMax: maxRetries,
+        };
+        await params.emit({
+          event: 'marketplace_status',
+          data: {
+            searchRunId: params.run.runId,
+            status: mpState.status,
+          },
+        });
+      }
+
+      try {
+        await this.sleep(delayMs, signal);
+      } catch {
+        return {
+          result,
+          streamedIncrementally,
+          retriesUsed: attempt,
+          abortedDuringSleep: true,
+        };
+      }
+
+      if (signal.aborted || params.run.abortController.signal.aborted) {
+        return {
+          result,
+          streamedIncrementally,
+          retriesUsed: attempt,
+          abortedDuringSleep: true,
+        };
+      }
+    }
+  }
+
   private async runInitialForMarketplace(
     run: ActiveRunState,
     marketplace: MarketplaceId,
     bypassCache: boolean,
     emit: SseEmitter,
+    allowAutoRetry: boolean,
   ): Promise<void> {
     const mpState = run.marketplaces.get(marketplace);
     if (!mpState) {
@@ -279,24 +408,32 @@ export class SearchOrchestrator {
     );
 
     let streamedIncrementally = false;
+    let retriesUsed = 0;
     let result: AdapterBatchResult | null = bypassCache ? null : this.getCached(cacheKey);
 
     if (!result) {
-      const baseContext = this.buildExecutionContext(run, marketplace, emit, settings);
-      const wrappedContext: AdapterExecutionContext = {
-        ...baseContext,
-        onBatch: (batch) => {
-          streamedIncrementally = true;
-          baseContext.onBatch?.(batch);
-        },
-      };
-      result = await adapter.executeInitial({
-        keywords: run.keywords,
-        unifiedFilters: run.unifiedFilters,
-        sortOrder: run.sortOrder,
-        translation: mpState.translation,
-        context: wrappedContext,
+      const execution = await this.executeWithRetries({
+        run,
+        marketplace,
+        allowAutoRetry,
+        settings,
+        emit,
+        runAttempt: (context) =>
+          adapter.executeInitial({
+            keywords: run.keywords,
+            unifiedFilters: run.unifiedFilters,
+            sortOrder: run.sortOrder,
+            translation: mpState.translation,
+            context,
+          }),
       });
+      if (execution.abortedDuringSleep) {
+        return;
+      }
+      result = execution.result;
+      streamedIncrementally = execution.streamedIncrementally;
+      retriesUsed = execution.retriesUsed;
+
       const stoppedEarly = marketplace === 'facebook' && run.facebookStoppedByUser;
       if (!run.abortController.signal.aborted && !stoppedEarly) {
         this.setCached(cacheKey, result);
@@ -328,18 +465,29 @@ export class SearchOrchestrator {
         ? 'empty'
         : result.runStatus;
 
+    const { notices: nextNotices, errorMessage: nextErrorMessage } = mergeRetryDiagnostics(
+      mpState.status.notices,
+      result.notices,
+      retriesUsed,
+      finalRunStatus,
+      result.errorMessage,
+    );
+
     mpState.status = {
       ...mpState.status,
       runStatus: finalRunStatus,
+      notices: nextNotices,
       loadedCount: streamedIncrementally
         ? mpState.status.loadedCount
         : filteredListings.length,
       droppedMalformedCount: result.droppedMalformedCount,
-      errorMessage: result.errorMessage ?? null,
+      errorMessage: nextErrorMessage,
       completedCities: result.completedCities,
       totalCities: result.totalCities,
       currentCityLabel: stoppedByUser ? null : result.currentCityLabel,
       stoppedByUser: stoppedByUser || result.stoppedByUser,
+      retryAttempt: undefined,
+      retryMax: undefined,
     };
 
     if (!streamedIncrementally && filteredListings.length > 0) {
@@ -423,7 +571,7 @@ export class SearchOrchestrator {
 
     await Promise.all(
       uniqueMarketplaces.map((mp) =>
-        this.runInitialForMarketplace(run, mp, Boolean(request.refresh), emit),
+        this.runInitialForMarketplace(run, mp, Boolean(request.refresh), emit, true),
       ),
     );
 
@@ -478,26 +626,34 @@ export class SearchOrchestrator {
         );
 
         let streamedIncrementally = false;
+        let retriesUsed = 0;
         let result = this.getCached(cacheKey);
         if (!result) {
           const adapter = this.adapters[mp];
-          const baseContext = this.buildExecutionContext(run, mp, emit, settings);
-          const wrappedContext: AdapterExecutionContext = {
-            ...baseContext,
-            onBatch: (batch) => {
-              streamedIncrementally = true;
-              baseContext.onBatch?.(batch);
-            },
-          };
-          result = await adapter.loadMore({
-            keywords: run.keywords,
-            unifiedFilters: run.unifiedFilters,
-            sortOrder: run.sortOrder,
-            translation: mpState.translation,
-            context: wrappedContext,
-            cursor: mpState.cursor,
-            page: nextPage,
+          const execution = await this.executeWithRetries({
+            run,
+            marketplace: mp,
+            allowAutoRetry: true,
+            settings,
+            emit,
+            runAttempt: (context) =>
+              adapter.loadMore({
+                keywords: run.keywords,
+                unifiedFilters: run.unifiedFilters,
+                sortOrder: run.sortOrder,
+                translation: mpState.translation,
+                context,
+                cursor: mpState.cursor,
+                page: nextPage,
+              }),
           });
+          if (execution.abortedDuringSleep || run.abortController.signal.aborted) {
+            return;
+          }
+          result = execution.result;
+          streamedIncrementally = execution.streamedIncrementally;
+          retriesUsed = execution.retriesUsed;
+
           const stoppedEarly = mp === 'facebook' && (run.facebookStoppedByUser || Boolean(result.stoppedByUser));
           if (!run.abortController.signal.aborted && !stoppedEarly) {
             this.setCached(cacheKey, result);
@@ -518,15 +674,24 @@ export class SearchOrchestrator {
         const nextLoadedCount = streamedIncrementally
           ? mpState.status.loadedCount
           : mpState.status.loadedCount + filtered.length;
+        const nextRunStatus =
+          result.runStatus === 'empty' && nextLoadedCount > 0
+            ? 'success'
+            : result.runStatus;
+        const { notices: nextNotices, errorMessage: nextErrorMessage } = mergeRetryDiagnostics(
+          mpState.status.notices,
+          result.notices,
+          retriesUsed,
+          nextRunStatus,
+          result.errorMessage,
+        );
         mpState.status = {
           ...mpState.status,
-          runStatus:
-            result.runStatus === 'empty' && nextLoadedCount > 0
-              ? 'success'
-              : result.runStatus,
+          runStatus: nextRunStatus,
+          notices: nextNotices,
           loadedCount: nextLoadedCount,
           droppedMalformedCount: mpState.status.droppedMalformedCount + result.droppedMalformedCount,
-          errorMessage: result.errorMessage ?? null,
+          errorMessage: nextErrorMessage,
           completedCities: result.completedCities ?? mpState.status.completedCities,
           totalCities: result.totalCities ?? mpState.status.totalCities,
           currentCityLabel: stoppedByUser
@@ -535,6 +700,8 @@ export class SearchOrchestrator {
               ? result.currentCityLabel
               : mpState.status.currentCityLabel,
           stoppedByUser: stoppedByUser || result.stoppedByUser,
+          retryAttempt: undefined,
+          retryMax: undefined,
         };
 
         if (!streamedIncrementally && filtered.length > 0) {
@@ -649,8 +816,8 @@ export class SearchOrchestrator {
       },
     });
 
-    // Bypass 60s cache on explicit retry
-    await this.runInitialForMarketplace(run, marketplace, true, emit);
+    // Bypass 60s cache and disable automatic retries on explicit manual retry
+    await this.runInitialForMarketplace(run, marketplace, true, emit, false);
 
     const statuses = recordFromRunMap(
       Array.from(run.marketplaces.entries()).map(([mp, state]) => [mp, state.status]),

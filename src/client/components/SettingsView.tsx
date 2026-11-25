@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import {
   BROWSER_MARKETPLACE_IDS,
+  MARKETPLACE_IDS,
   MARKETPLACE_LABELS,
   createDefaultFacebookCityHubs,
+  createDefaultMarketplaceRetrySettings,
   type BrowserChannel,
   type BrowserMarketplaceId,
   type FacebookCityHub,
+  type MarketplaceId,
+  type MarketplaceRetrySettings,
   type SettingsResponse,
 } from '../../shared/index.ts';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
@@ -40,6 +44,11 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
   const [newHubSlug, setNewHubSlug] = useState('');
   const [newHubLabel, setNewHubLabel] = useState('');
 
+  // Automatic Retries state
+  const [retrySettings, setRetrySettings] = useState<MarketplaceRetrySettings>(
+    createDefaultMarketplaceRetrySettings,
+  );
+
   // Profile Reset <dialog> state
   const [resetTarget, setResetTarget] = useState<BrowserMarketplaceId | null>(null);
   const [openingProfile, setOpeningProfile] = useState<BrowserMarketplaceId | null>(null);
@@ -54,6 +63,7 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     setDefaultRadiusMiles(res.settings.defaultLocalPickupRadiusMiles);
     setHomeFacebookCitySlug(res.settings.homeFacebookCitySlug ?? '');
     setHubs(res.settings.facebookCityHubs.map((h) => ({ ...h })));
+    setRetrySettings(res.settings.retrySettings ?? createDefaultMarketplaceRetrySettings());
   };
 
   useEffect(() => {
@@ -198,6 +208,57 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     const updated = (await res.json()) as SettingsResponse;
     syncFromResponse(updated);
     setStatusMessage('Saved Facebook City Hubs.');
+  };
+
+  const updateRetryField = <K extends 'enabled' | 'maxRetries' | 'delaySeconds'>(
+    mp: MarketplaceId,
+    field: K,
+    value: MarketplaceRetrySettings[MarketplaceId][K],
+  ) => {
+    setRetrySettings((prev) => ({
+      ...prev,
+      [mp]: {
+        ...prev[mp],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSaveRetrySettings = async () => {
+    setStatusMessage(null);
+    setErrorMessage(null);
+
+    for (const mp of MARKETPLACE_IDS) {
+      const cfg = retrySettings[mp];
+      if (!Number.isInteger(cfg.maxRetries) || cfg.maxRetries < 1 || cfg.maxRetries > 5) {
+        setErrorMessage(`${MARKETPLACE_LABELS[mp]} retry count must be a whole number from 1 to 5.`);
+        return;
+      }
+      if (!Number.isFinite(cfg.delaySeconds) || cfg.delaySeconds < 0 || cfg.delaySeconds > 60) {
+        setErrorMessage(`${MARKETPLACE_LABELS[mp]} wait time must be between 0 and 60 seconds.`);
+        return;
+      }
+    }
+
+    const res = await fetchImpl('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        settings: {
+          retrySettings,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+      setErrorMessage(errJson.error ?? 'Failed to save automatic retry settings.');
+      return;
+    }
+
+    const updated = (await res.json()) as SettingsResponse;
+    syncFromResponse(updated);
+    setStatusMessage('Saved automatic retry settings.');
   };
 
   const handleAddHub = () => {
@@ -608,6 +669,91 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
           >
             Add hub
           </button>
+        </div>
+      </section>
+
+      {/* Automatic Retries */}
+      <section className="panel-box flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="m-0 text-base font-semibold text-slate-900">Automatic Retries</h2>
+            <p className="m-0 text-xs text-slate-600">
+              Retry failed initial searches, Load more requests, and queries to each Facebook City Hub
+              after a fixed wait before surfacing an error.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setRetrySettings(createDefaultMarketplaceRetrySettings())}
+              className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              Reset defaults
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveRetrySettings}
+              className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 cursor-pointer"
+            >
+              Save retry settings
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+          {MARKETPLACE_IDS.map((mp) => {
+            const cfg = retrySettings[mp];
+            const label = MARKETPLACE_LABELS[mp];
+            return (
+              <div
+                key={mp}
+                data-testid={`retry-card-${mp}`}
+                className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3"
+              >
+                <label className="flex items-center justify-between gap-2 text-sm font-medium text-slate-900 cursor-pointer">
+                  <span>{label}</span>
+                  <input
+                    type="checkbox"
+                    checked={cfg.enabled}
+                    aria-label={`Enable automatic retries for ${label}`}
+                    onChange={(e) => updateRetryField(mp, 'enabled', e.target.checked)}
+                  />
+                </label>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-700">
+                    <span>Retries (1–5)</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={5}
+                      step={1}
+                      disabled={!cfg.enabled}
+                      aria-label={`${label} retry count`}
+                      value={cfg.maxRetries}
+                      onChange={(e) => updateRetryField(mp, 'maxRetries', Number(e.target.value))}
+                      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs tabular disabled:bg-slate-100 disabled:text-slate-400"
+                    />
+                  </label>
+
+                  <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-700">
+                    <span>Wait (sec)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      step="any"
+                      disabled={!cfg.enabled}
+                      aria-label={`${label} retry wait seconds`}
+                      value={cfg.delaySeconds}
+                      onChange={(e) => updateRetryField(mp, 'delaySeconds', Number(e.target.value))}
+                      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs tabular disabled:bg-slate-100 disabled:text-slate-400"
+                    />
+                  </label>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

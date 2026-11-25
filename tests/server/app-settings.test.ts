@@ -303,4 +303,85 @@ describe('createApp persistence and /api/settings', () => {
     expect(() => instance.db.prepare('SELECT 1').get()).toThrow();
     activeApps.pop();
   });
+
+  it('returns default retrySettings, persists per-Marketplace updates, validates bounds, and migrates v3 DB to v4', async () => {
+    const v3Dir = createTempDataDir();
+    const legacyDb = new DatabaseSync(path.join(v3Dir, 'data.sqlite'));
+    legacyDb.exec(`
+      CREATE TABLE app_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        browser_channel TEXT NOT NULL,
+        home_postal_code TEXT,
+        default_local_pickup_radius_miles INTEGER NOT NULL,
+        home_facebook_city_slug TEXT,
+        facebook_radius_miles INTEGER NOT NULL,
+        facebook_city_hubs_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO app_settings (
+        id, browser_channel, home_postal_code, default_local_pickup_radius_miles,
+        home_facebook_city_slug, facebook_radius_miles, facebook_city_hubs_json, updated_at
+      ) VALUES (1, 'chrome', NULL, 50, NULL, 500, '[]', '2026-01-01T00:00:00.000Z');
+      PRAGMA user_version = 3;
+    `);
+    legacyDb.close();
+
+    const migrated = createApp({ dataDir: v3Dir, env: {} });
+    activeApps.push(migrated);
+    expect(migrated.database.getUserVersion()).toBe(4);
+
+    const defaultsRes = await migrated.app.request('/api/settings');
+    expect(defaultsRes.status).toBe(200);
+    const defaultsJson = await defaultsRes.json();
+    expect(defaultsJson.settings.retrySettings).toEqual({
+      ebay: { enabled: true, maxRetries: 1, delaySeconds: 2 },
+      poshmark: { enabled: true, maxRetries: 1, delaySeconds: 2 },
+      mercari: { enabled: true, maxRetries: 1, delaySeconds: 2 },
+      facebook: { enabled: true, maxRetries: 1, delaySeconds: 2 },
+    });
+
+    // Reject out-of-bounds retry settings
+    for (const invalidRetry of [
+      { enabled: true, maxRetries: 0, delaySeconds: 2 },
+      { enabled: true, maxRetries: 6, delaySeconds: 2 },
+      { enabled: true, maxRetries: 1, delaySeconds: -0.5 },
+      { enabled: true, maxRetries: 1, delaySeconds: 61 },
+    ]) {
+      const badRes = await migrated.app.request('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            retrySettings: {
+              ...defaultsJson.settings.retrySettings,
+              mercari: invalidRetry,
+            },
+          },
+        }),
+      });
+      expect(badRes.status).toBe(400);
+    }
+
+    // Accept fractional delaySeconds and per-Marketplace overrides, persist across restarts
+    const customRetry = {
+      ...defaultsJson.settings.retrySettings,
+      mercari: { enabled: true, maxRetries: 3, delaySeconds: 0.5 },
+      ebay: { enabled: false, maxRetries: 2, delaySeconds: 5 },
+    };
+    const okRes = await migrated.app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { retrySettings: customRetry } }),
+    });
+    expect(okRes.status).toBe(200);
+
+    await migrated.shutdown();
+    activeApps.pop();
+
+    const reopened = createApp({ dataDir: v3Dir, env: {} });
+    activeApps.push(reopened);
+    const reopenedRes = await reopened.app.request('/api/settings');
+    const reopenedJson = await reopenedRes.json();
+    expect(reopenedJson.settings.retrySettings).toEqual(customRetry);
+  });
 });

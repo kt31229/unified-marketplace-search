@@ -31,3 +31,7 @@ _Avoid_: Favorites, bookmarks
 **Watchlist Entry**:
 A frozen snapshot of a Listing saved to the Watchlist, including its title, price, thumbnail, direct link, and saved timestamp.
 _Avoid_: Saved listing, favorite, bookmark, watched item
+
+**Facebook City Hub**:
+A configured regional Facebook Marketplace city endpoint queried sequentially as part of a nationwide sweep.
+_Avoid_: Hub query, city query, location hub

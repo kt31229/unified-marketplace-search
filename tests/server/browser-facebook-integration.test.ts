@@ -340,7 +340,7 @@ describe('Facebook Marketplace orchestrator & HTTP integration', () => {
     const fb1 = (complete1?.data.statuses as Record<string, { runStatus: string; loadedCount: number }>).facebook;
     expect(fb1?.runStatus).toBe('challenge_or_auth_required');
     expect(fb1?.loadedCount).toBe(1);
-    expect(gotoUrls).toHaveLength(2); // seattle + sanfrancisco, la never visited
+    expect(gotoUrls).toHaveLength(3); // seattle + sanfrancisco (initial + 1 auto-retry), la never visited
 
     // Run 2 while latched: does NOT navigate at all, immediately returns challenge_or_auth_required
     const res2 = await instance.app.request('/api/searches/stream', {
@@ -353,7 +353,7 @@ describe('Facebook Marketplace orchestrator & HTTP integration', () => {
     const complete2 = events2.find((e) => e.event === 'run_complete');
     const fb2 = (complete2?.data.statuses as Record<string, { runStatus: string }>).facebook;
     expect(fb2?.runStatus).toBe('challenge_or_auth_required');
-    expect(gotoUrls).toHaveLength(2);
+    expect(gotoUrls).toHaveLength(3);
 
     // Open browser session -> unlatches
     const openRes = await instance.app.request('/api/browser/facebook/open-session', {

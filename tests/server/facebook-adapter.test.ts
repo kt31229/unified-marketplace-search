@@ -1411,4 +1411,183 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     expect(res.errorMessage).toContain('Rate limit exceeded');
     await bsm.shutdown();
   });
+
+  it('retries a failing Facebook City Hub before tripping circuit breaker, recovers without latching, and handles loadMore/abort', async () => {
+    let sfAttempts = 0;
+    let laLoadMoreAttempts = 0;
+    const sleepCalls: number[] = [];
+    const progressUpdates: Array<{ currentCityLabel?: string | null; retryAttempt?: number; retryMax?: number }> = [];
+
+    const scripted = createScriptedFacebookTransport({
+      stepsByUrl: (url) => {
+        if (url.includes('/marketplace/sanfrancisco/')) {
+          sfAttempts += 1;
+          if (sfAttempts === 1) {
+            return {
+              url: 'https://www.facebook.com/checkpoint/',
+              title: 'Security Check',
+              html: '<html><body><div id="checkpoint_title">Check</div></body></html>',
+            };
+          }
+        }
+        const hub = url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'seattle';
+        return {
+          html: wrapRelayHtml({
+            marketplace_search: {
+              feed_units: {
+                edges: [
+                  {
+                    node: {
+                      listing: {
+                        id: `${hub}-init-1`,
+                        marketplace_listing_title: `Init ${hub}`,
+                        listing_price: { amount: '55.00' },
+                        is_sold: false,
+                        is_pending: false,
+                        delivery_types: ['SHIPPING_ONSITE'],
+                      },
+                    },
+                  },
+                ],
+                page_info: { end_cursor: `${hub}-cursor-2`, has_next_page: true },
+              },
+            },
+          }),
+        };
+      },
+      onScrollLoadMore: async (_scrollIdx, url) => {
+        if (url.includes('/marketplace/la/')) {
+          laLoadMoreAttempts += 1;
+          if (laLoadMoreAttempts === 1) {
+            return {
+              url: 'https://www.facebook.com/api/graphql/',
+              status: 200,
+              body: { errors: [{ code: 1357001, message: 'Please log in' }] },
+            };
+          }
+        }
+        const hub = url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'seattle';
+        return {
+          url: 'https://www.facebook.com/api/graphql/',
+          status: 200,
+          body: {
+            data: {
+              marketplace_search: {
+                feed_units: {
+                  edges: [
+                    {
+                      node: {
+                        listing: {
+                          id: `${hub}-p2-1`,
+                          marketplace_listing_title: `Page 2 ${hub}`,
+                          listing_price: { amount: '60.00' },
+                          is_sold: false,
+                          is_pending: false,
+                          delivery_types: ['SHIPPING_ONSITE'],
+                        },
+                      },
+                    },
+                  ],
+                  page_info: { end_cursor: null, has_next_page: false },
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+
+    const bsm = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: scripted.transport,
+    });
+    const adapter = createFacebookAdapter({
+      browserSessionManager: bsm,
+      sleep: async (ms) => {
+        sleepCalls.push(ms);
+      },
+    });
+    const filters = {
+      ...createDefaultUnifiedFilter(),
+      facebookLocationSlugs: ['seattle', 'sanfrancisco', 'la'],
+    };
+    const context = makeContext({
+      allowAutoRetry: true,
+      onProgress: (update) => {
+        progressUpdates.push({
+          currentCityLabel: update.currentCityLabel,
+          retryAttempt: update.retryAttempt,
+          retryMax: update.retryMax,
+        });
+      },
+    });
+    const translation = adapter.translateFilters('jacket', filters, 'relevance', context);
+
+    // SF fails once with challenge, retries after 2000ms, succeeds -> no circuit breaker latch!
+    const initRes = await adapter.executeInitial({
+      keywords: 'jacket',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context,
+    });
+
+    expect(initRes.runStatus).toBe('success');
+    expect(adapter.isChallengeLatched()).toBe(false);
+    expect(initRes.completedCities).toBe(3);
+    expect(initRes.notices).toContain('San Francisco, CA succeeded after 1 automatic retry.');
+    expect(progressUpdates.some((p) => p.currentCityLabel === 'San Francisco, CA' && p.retryAttempt === 1 && p.retryMax === 1)).toBe(true);
+
+    // loadMore also retries LA hub when it hits auth error on attempt 1
+    const lmRes = await adapter.loadMore({
+      keywords: 'jacket',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation,
+      context,
+      cursor: initRes.nextCursor,
+      page: 2,
+    });
+    expect(lmRes.runStatus).toBe('success');
+    expect(adapter.isChallengeLatched()).toBe(false);
+    expect(lmRes.notices).toContain('Los Angeles, CA succeeded after 1 automatic retry.');
+
+    // Aborting during hub retry sleep returns stoppedByUser cleanly
+    const abortController = new AbortController();
+    const failScripted = createScriptedFacebookTransport({
+      stepsByUrl: () => ({
+        finalUrl: 'https://www.facebook.com/checkpoint/',
+        title: 'Security Check',
+        html: '<html><body><div id="checkpoint_title">Check</div></body></html>',
+      }),
+    });
+    const bsm2 = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: failScripted.transport,
+    });
+    const adapter2 = createFacebookAdapter({
+      browserSessionManager: bsm2,
+      sleep: async (_ms, signal) => {
+        abortController.abort();
+        if (signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
+      },
+    });
+    const t2 = adapter2.translateFilters('jacket', filters, 'relevance', makeContext());
+    const abortedRes = await adapter2.executeInitial({
+      keywords: 'jacket',
+      unifiedFilters: filters,
+      sortOrder: 'relevance',
+      translation: t2,
+      context: makeContext({ allowAutoRetry: true, signal: abortController.signal }),
+    });
+    expect(abortedRes.stoppedByUser).toBe(true);
+    expect(adapter2.isChallengeLatched()).toBe(false);
+
+    await bsm.shutdown();
+    await bsm2.shutdown();
+  });
 });

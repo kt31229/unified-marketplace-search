@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_FACEBOOK_CITY_HUBS,
+  createDefaultMarketplaceRetrySettings,
   type AppSettings,
   type Listing,
   type MarketplaceId,
@@ -169,6 +170,7 @@ function makeSettings(): AppSettings {
     homeFacebookCitySlug: 'seattle',
     facebookRadiusMiles: 500,
     facebookCityHubs: DEFAULT_FACEBOOK_CITY_HUBS,
+    retrySettings: createDefaultMarketplaceRetrySettings(),
   };
 }
 
