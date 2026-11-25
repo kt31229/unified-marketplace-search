@@ -144,6 +144,8 @@ export const MarketplaceStatusSchema = z.object({
   totalCities: z.number().int().nonnegative().optional(),
   currentCityLabel: z.string().nullable().optional(),
   stoppedByUser: z.boolean().optional(),
+  retryAttempt: z.number().int().positive().optional(),
+  retryMax: z.number().int().positive().optional(),
 });
 
 export type MarketplaceStatus = z.infer<typeof MarketplaceStatusSchema>;
@@ -255,6 +257,38 @@ export const CreateWatchlistEntryRequestSchema = z.union([
   WatchlistSnapshotInputSchema,
 ]);
 
+export const MarketplaceRetryConfigSchema = z.object({
+  enabled: z.boolean(),
+  maxRetries: z.number().int().min(1).max(5),
+  delaySeconds: z.number().min(0).max(60),
+});
+
+export type MarketplaceRetryConfig = z.infer<typeof MarketplaceRetryConfigSchema>;
+
+export const MarketplaceRetrySettingsSchema = z.object({
+  ebay: MarketplaceRetryConfigSchema,
+  poshmark: MarketplaceRetryConfigSchema,
+  mercari: MarketplaceRetryConfigSchema,
+  facebook: MarketplaceRetryConfigSchema,
+});
+
+export type MarketplaceRetrySettings = z.infer<typeof MarketplaceRetrySettingsSchema>;
+
+export const DEFAULT_MARKETPLACE_RETRY_CONFIG: MarketplaceRetryConfig = {
+  enabled: true,
+  maxRetries: 1,
+  delaySeconds: 2,
+};
+
+export function createDefaultMarketplaceRetrySettings(): MarketplaceRetrySettings {
+  return {
+    ebay: { ...DEFAULT_MARKETPLACE_RETRY_CONFIG },
+    poshmark: { ...DEFAULT_MARKETPLACE_RETRY_CONFIG },
+    mercari: { ...DEFAULT_MARKETPLACE_RETRY_CONFIG },
+    facebook: { ...DEFAULT_MARKETPLACE_RETRY_CONFIG },
+  };
+}
+
 export const AppSettingsSchema = z.object({
   browserChannel: BrowserChannelSchema,
   homePostalCode: z.string().trim().nullable(),
@@ -262,6 +296,7 @@ export const AppSettingsSchema = z.object({
   homeFacebookCitySlug: z.string().trim().nullable(),
   facebookRadiusMiles: z.number().int().positive().max(500).default(500),
   facebookCityHubs: z.array(FacebookCityHubSchema),
+  retrySettings: MarketplaceRetrySettingsSchema.default(createDefaultMarketplaceRetrySettings),
 });
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
@@ -274,6 +309,7 @@ export function createDefaultAppSettings(): AppSettings {
     homeFacebookCitySlug: null,
     facebookRadiusMiles: 500,
     facebookCityHubs: createDefaultFacebookCityHubs(),
+    retrySettings: createDefaultMarketplaceRetrySettings(),
   };
 }
 

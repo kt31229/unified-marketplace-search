@@ -1,3 +1,5 @@
+import type { MarketplaceRunStatus } from '../../shared/index.ts';
+
 /**
  * Shared timeout and abortable sleep utilities used across Marketplace adapters
  * and the search orchestrator.
@@ -181,4 +183,34 @@ export function formatErrorWithUpstreamDetail(baseMessage: string, rawBody: unkn
     return `${baseMessage.slice(0, -1)} (${detail}).`;
   }
   return `${baseMessage} (${detail})`;
+}
+
+export function isRetryableRunStatus(status: MarketplaceRunStatus): boolean {
+  return (
+    status === 'challenge_or_auth_required' ||
+    status === 'timeout' ||
+    status === 'parse_error' ||
+    status === 'network_error'
+  );
+}
+
+function pluralizeRetries(retryCount: number): string {
+  return retryCount === 1 ? '1 automatic retry' : `${retryCount} automatic retries`;
+}
+
+export function formatRetrySuccessNotice(retryCount: number, prefix?: string): string {
+  const label = pluralizeRetries(retryCount);
+  if (prefix) {
+    return `${prefix} succeeded after ${label}.`;
+  }
+  return `Succeeded after ${label}.`;
+}
+
+export function formatRetryFailureMessage(
+  retryCount: number,
+  errorMessage: string | null | undefined,
+): string {
+  const label = pluralizeRetries(retryCount);
+  const trimmed = errorMessage?.trim();
+  return trimmed ? `Failed after ${label}: ${trimmed}` : `Failed after ${label}.`;
 }

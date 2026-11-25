@@ -659,4 +659,97 @@ describe('Search Workbench UI', () => {
     // Already-rendered Seattle Listing remains in the grid
     expect(screen.getByText('Seattle Patagonia Vest')).toBeInTheDocument();
   });
+
+  it('displays live retry badges in StatusStrip and retry notices in diagnostics popover', async () => {
+    const encoder = new TextEncoder();
+    const encodeSse = (events: Array<{ event: string; data: unknown }>) =>
+      events.map((evt) => `event: ${evt.event}\ndata: ${JSON.stringify(evt.data)}\n\n`).join('');
+
+    let enqueueChunk: ((chunk: string) => void) | null = null;
+    let closeStream: (() => void) | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/settings') {
+        return new Response(JSON.stringify(createMockSettingsResponse()), { status: 200 });
+      }
+      if (url === '/api/searches/stream') {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            enqueueChunk = (chunk: string) => controller.enqueue(encoder.encode(chunk));
+            closeStream = () => controller.close();
+            controller.enqueue(
+              encoder.encode(
+                encodeSse([
+                  {
+                    event: 'run_started',
+                    data: {
+                      searchRunId: 'run-retry-ui',
+                      diagnostics: makeDiagnostics(['mercari', 'facebook']),
+                      statuses: makeStatuses(['mercari', 'facebook'], {
+                        mercari: { runStatus: 'running', retryAttempt: 1, retryMax: 1 },
+                        facebook: {
+                          runStatus: 'running',
+                          completedCities: 2,
+                          totalCities: 8,
+                          currentCityLabel: 'San Francisco, CA',
+                          retryAttempt: 1,
+                          retryMax: 2,
+                        },
+                      }),
+                    },
+                  },
+                ]),
+              ),
+            );
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
+    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }));
+
+    const mercariCard = await screen.findByTestId('status-card-mercari');
+    const fbCard = await screen.findByTestId('status-card-facebook');
+
+    await waitFor(() => {
+      expect(within(mercariCard).getByText('Retrying (1/1)...')).toBeInTheDocument();
+      expect(within(fbCard).getByText('City 2 of 8 · Retry 1/2')).toBeInTheDocument();
+    });
+
+    // Complete the stream with a retry success notice on Mercari
+    (enqueueChunk as ((chunk: string) => void) | null)?.(
+      encodeSse([
+        {
+          event: 'run_complete',
+          data: {
+            searchRunId: 'run-retry-ui',
+            statuses: makeStatuses(['mercari', 'facebook'], {
+              mercari: {
+                runStatus: 'success',
+                loadedCount: 1,
+                notices: ['Succeeded after 1 automatic retry.'],
+              },
+              facebook: {
+                runStatus: 'network_error',
+                errorMessage: 'Failed after 2 automatic retries: Timeout',
+              },
+            }),
+          },
+        },
+      ]),
+    );
+    (closeStream as (() => void) | null)?.();
+
+    await waitFor(() => {
+      expect(within(mercariCard).getByText(/Succeeded after 1 automatic retry\./i)).toBeInTheDocument();
+      expect(within(fbCard).getByText(/Failed after 2 automatic retries: Timeout/i)).toBeInTheDocument();
+    });
+  });
 });

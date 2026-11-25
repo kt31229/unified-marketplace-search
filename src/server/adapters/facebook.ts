@@ -7,6 +7,7 @@ import {
   type FacebookCityHub,
   type Listing,
   type MarketplaceId,
+  type MarketplaceRunStatus,
   type ShippingType,
   type SortOrder,
   type TranslationStatus,
@@ -21,6 +22,9 @@ import { applyPostFilters } from './post-filter.ts';
 import {
   createTimeoutRace,
   defaultSleep,
+  formatRetryFailureMessage,
+  formatRetrySuccessNotice,
+  isRetryableRunStatus,
   isTimeoutError,
   summarizeUpstreamError,
 } from './utils.ts';
@@ -849,6 +853,63 @@ export class FacebookAdapter implements MarketplaceAdapter {
     }
   }
 
+  private async runHubWithRetries<
+    T extends { ok: boolean; runStatus?: MarketplaceRunStatus; errorMessage?: string },
+  >(params: {
+    hubIndex: number;
+    totalCities: number;
+    hubLabel: string;
+    context: AdapterExecutionContext;
+    executeAttempt: () => Promise<T>;
+  }): Promise<{ aborted: true } | { aborted: false; outcome: T; retriesUsed: number }> {
+    const retryConfig = params.context.settings.retrySettings.facebook;
+    const maxRetries =
+      params.context.allowAutoRetry && retryConfig.enabled ? retryConfig.maxRetries : 0;
+    const delayMs = Math.round(retryConfig.delaySeconds * 1000);
+    const sleepFn = params.context.sleep ?? this.sleep;
+
+    for (let attempt = 0; ; attempt += 1) {
+      let outcome: T;
+      try {
+        outcome = await params.executeAttempt();
+      } catch {
+        return { aborted: true };
+      }
+
+      if (params.context.signal?.aborted) {
+        return { aborted: true };
+      }
+
+      if (
+        outcome.ok ||
+        !outcome.runStatus ||
+        !isRetryableRunStatus(outcome.runStatus) ||
+        attempt >= maxRetries
+      ) {
+        return { aborted: false, outcome, retriesUsed: attempt };
+      }
+
+      params.context.onProgress?.({
+        runStatus: 'running',
+        completedCities: params.hubIndex + 1,
+        totalCities: params.totalCities,
+        currentCityLabel: params.hubLabel,
+        retryAttempt: attempt + 1,
+        retryMax: maxRetries,
+      });
+
+      try {
+        await sleepFn(delayMs, params.context.signal);
+      } catch {
+        return { aborted: true };
+      }
+
+      if (params.context.signal?.aborted) {
+        return { aborted: true };
+      }
+    }
+  }
+
   async executeInitial(params: AdapterSearchParams): Promise<AdapterBatchResult> {
     if (this.challengeLatched) {
       return {
@@ -885,6 +946,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
     let lastLoadedHubSlug = hubs[0]!.slug;
     let lastErrorStatus: 'timeout' | 'parse_error' | 'network_error' | null = null;
     let lastErrorMessage: string | null = null;
+    const retryNotices: string[] = [];
 
     for (let i = 0; i < hubs.length; i += 1) {
       const hub = hubs[i]!;
@@ -898,6 +960,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
           totalCities,
           currentCityLabel: null,
           stoppedByUser: true,
+          notices: retryNotices.length > 0 ? retryNotices : undefined,
         };
       }
 
@@ -915,6 +978,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
             totalCities,
             currentCityLabel: null,
             stoppedByUser: true,
+            notices: retryNotices.length > 0 ? retryNotices : undefined,
           };
         }
       }
@@ -929,6 +993,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
           totalCities,
           currentCityLabel: null,
           stoppedByUser: true,
+          notices: retryNotices.length > 0 ? retryNotices : undefined,
         };
       }
 
@@ -937,12 +1002,19 @@ export class FacebookAdapter implements MarketplaceAdapter {
         completedCities: i + 1,
         totalCities,
         currentCityLabel: hub.label,
+        retryAttempt: undefined,
+        retryMax: undefined,
       });
 
-      let outcome: Awaited<ReturnType<FacebookAdapter['fetchHubInitial']>>;
-      try {
-        outcome = await this.fetchHubInitial(hub, unifiedFilters, seenIds, context.signal);
-      } catch {
+      const hubResult = await this.runHubWithRetries({
+        hubIndex: i,
+        totalCities,
+        hubLabel: hub.label,
+        context,
+        executeAttempt: () => this.fetchHubInitial(hub, unifiedFilters, seenIds, context.signal),
+      });
+
+      if (hubResult.aborted) {
         return {
           runStatus: allListings.length > 0 ? 'success' : 'empty',
           listings: interleaveListingsAcrossHubs(allListings),
@@ -952,11 +1024,18 @@ export class FacebookAdapter implements MarketplaceAdapter {
           totalCities,
           currentCityLabel: null,
           stoppedByUser: true,
+          notices: retryNotices.length > 0 ? retryNotices : undefined,
         };
       }
 
+      const { outcome, retriesUsed } = hubResult;
+
       if (!outcome.ok) {
         totalDroppedMalformed += outcome.droppedMalformedCount ?? 0;
+        const finalHubError =
+          retriesUsed > 0
+            ? formatRetryFailureMessage(retriesUsed, outcome.errorMessage)
+            : outcome.errorMessage;
 
         if (outcome.runStatus === 'challenge_or_auth_required') {
           this.challengeLatched = true;
@@ -971,13 +1050,14 @@ export class FacebookAdapter implements MarketplaceAdapter {
             currentCityLabel: null,
             errorMessage:
               completedCities > 0
-                ? `${outcome.errorMessage} Circuit breaker aborted remaining hubs; retained ${retained.length} earlier Listing(s).`
-                : outcome.errorMessage,
+                ? `${finalHubError} Circuit breaker aborted remaining hubs; retained ${retained.length} earlier Listing(s).`
+                : finalHubError,
+            notices: retryNotices.length > 0 ? retryNotices : undefined,
           };
         }
 
         lastErrorStatus = outcome.runStatus;
-        lastErrorMessage = outcome.errorMessage;
+        lastErrorMessage = finalHubError;
 
         if (totalCities === 1) {
           return {
@@ -988,10 +1068,20 @@ export class FacebookAdapter implements MarketplaceAdapter {
             completedCities,
             totalCities,
             currentCityLabel: null,
-            errorMessage: outcome.errorMessage,
+            errorMessage: finalHubError,
+            notices: retryNotices.length > 0 ? retryNotices : undefined,
           };
         }
+        if (retriesUsed > 0) {
+          retryNotices.push(`${hub.label}: ${finalHubError}`);
+        }
         continue;
+      }
+
+      if (retriesUsed > 0) {
+        retryNotices.push(
+          formatRetrySuccessNotice(retriesUsed, totalCities > 1 ? hub.label : undefined),
+        );
       }
 
       completedCities += 1;
@@ -1031,6 +1121,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
         totalCities,
         currentCityLabel: null,
         errorMessage: lastErrorMessage,
+        notices: retryNotices.length > 0 ? retryNotices : undefined,
       };
     }
 
@@ -1050,6 +1141,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
       completedCities,
       totalCities,
       currentCityLabel: null,
+      notices: retryNotices.length > 0 ? retryNotices : undefined,
     };
   }
 
@@ -1265,6 +1357,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
     let lastLoadedHubSlug = cursor.currentLoadedHubSlug;
     let lastErrorStatus: 'timeout' | 'parse_error' | 'network_error' | null = null;
     let lastErrorMessage: string | null = null;
+    const retryNotices: string[] = [];
 
     const buildStoppedResult = (): AdapterBatchResult => {
       const updatedHubs = cursor.hubs.map((h) => updatedHubsBySlug.get(h.slug) ?? h);
@@ -1286,6 +1379,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
         totalCities,
         currentCityLabel: null,
         stoppedByUser: true,
+        notices: retryNotices.length > 0 ? retryNotices : undefined,
       };
     };
 
@@ -1313,17 +1407,30 @@ export class FacebookAdapter implements MarketplaceAdapter {
         completedCities: i + 1,
         totalCities,
         currentCityLabel: hub.label,
+        retryAttempt: undefined,
+        retryMax: undefined,
       });
 
-      let outcome: Awaited<ReturnType<FacebookAdapter['fetchHubLoadMore']>>;
-      try {
-        outcome = await this.fetchHubLoadMore(hub, unifiedFilters, seenIds, context.signal);
-      } catch {
+      const hubResult = await this.runHubWithRetries({
+        hubIndex: i,
+        totalCities,
+        hubLabel: hub.label,
+        context,
+        executeAttempt: () => this.fetchHubLoadMore(hub, unifiedFilters, seenIds, context.signal),
+      });
+
+      if (hubResult.aborted) {
         return buildStoppedResult();
       }
 
+      const { outcome, retriesUsed } = hubResult;
+
       if (!outcome.ok) {
         totalDroppedMalformed += outcome.droppedMalformedCount ?? 0;
+        const finalHubError =
+          retriesUsed > 0
+            ? formatRetryFailureMessage(retriesUsed, outcome.errorMessage)
+            : outcome.errorMessage;
 
         if (outcome.runStatus === 'challenge_or_auth_required') {
           this.challengeLatched = true;
@@ -1338,13 +1445,14 @@ export class FacebookAdapter implements MarketplaceAdapter {
             currentCityLabel: null,
             errorMessage:
               completedCities > 0
-                ? `${outcome.errorMessage} Circuit breaker aborted remaining hubs; retained ${retained.length} earlier Listing(s).`
-                : outcome.errorMessage,
+                ? `${finalHubError} Circuit breaker aborted remaining hubs; retained ${retained.length} earlier Listing(s).`
+                : finalHubError,
+            notices: retryNotices.length > 0 ? retryNotices : undefined,
           };
         }
 
         lastErrorStatus = outcome.runStatus;
-        lastErrorMessage = outcome.errorMessage;
+        lastErrorMessage = finalHubError;
 
         if (totalCities === 1) {
           return {
@@ -1355,10 +1463,20 @@ export class FacebookAdapter implements MarketplaceAdapter {
             completedCities,
             totalCities,
             currentCityLabel: null,
-            errorMessage: outcome.errorMessage,
+            errorMessage: finalHubError,
+            notices: retryNotices.length > 0 ? retryNotices : undefined,
           };
         }
+        if (retriesUsed > 0) {
+          retryNotices.push(`${hub.label}: ${finalHubError}`);
+        }
         continue;
+      }
+
+      if (retriesUsed > 0) {
+        retryNotices.push(
+          formatRetrySuccessNotice(retriesUsed, totalCities > 1 ? hub.label : undefined),
+        );
       }
 
       completedCities += 1;
@@ -1397,6 +1515,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
         totalCities,
         currentCityLabel: null,
         errorMessage: lastErrorMessage,
+        notices: retryNotices.length > 0 ? retryNotices : undefined,
       };
     }
 
@@ -1417,6 +1536,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
       completedCities,
       totalCities,
       currentCityLabel: null,
+      notices: retryNotices.length > 0 ? retryNotices : undefined,
     };
   }
 }

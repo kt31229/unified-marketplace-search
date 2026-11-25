@@ -273,4 +273,57 @@ describe('Workbench Sidebar and Settings UI', () => {
       expect(screen.getByRole('status')).toHaveTextContent(/Server stopped cleanly/i);
     });
   });
+
+  it('renders the 4-column Automatic Retries panel, disables inputs when unchecked, resets defaults, and saves', async () => {
+    const { fetchMock, calls } = createFetchMock(createMockSettingsResponse());
+    render(<App fetchImpl={fetchMock} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Settings$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Automatic Retries/i)).toBeInTheDocument();
+    });
+
+    const mercariCard = screen.getByTestId('retry-card-mercari');
+    const mercariToggle = within(mercariCard).getByLabelText(/Enable automatic retries for Mercari US/i);
+    const mercariCount = within(mercariCard).getByLabelText(/Mercari US retry count/i);
+    const mercariWait = within(mercariCard).getByLabelText(/Mercari US retry wait seconds/i);
+
+    expect(mercariToggle).toBeChecked();
+    expect(mercariCount).toHaveValue(1);
+    expect(mercariWait).toHaveValue(2);
+
+    // Edit Mercari retries and wait
+    await userEvent.clear(mercariCount);
+    await userEvent.type(mercariCount, '3');
+    await userEvent.clear(mercariWait);
+    await userEvent.type(mercariWait, '0.5');
+
+    // Disable eBay retries -> its inputs become disabled
+    const ebayCard = screen.getByTestId('retry-card-ebay');
+    const ebayToggle = within(ebayCard).getByLabelText(/Enable automatic retries for eBay/i);
+    await userEvent.click(ebayToggle);
+    expect(within(ebayCard).getByLabelText(/eBay retry count/i)).toBeDisabled();
+    expect(within(ebayCard).getByLabelText(/eBay retry wait seconds/i)).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /Save retry settings/i }));
+
+    await waitFor(() => {
+      const putCall = calls.filter((c) => c.url === '/api/settings' && c.method === 'PUT').at(-1);
+      const saved = (
+        putCall?.body as {
+          settings: {
+            retrySettings: Record<string, { enabled: boolean; maxRetries: number; delaySeconds: number }>;
+          };
+        }
+      ).settings.retrySettings;
+      expect(saved.mercari).toEqual({ enabled: true, maxRetries: 3, delaySeconds: 0.5 });
+      expect(saved.ebay?.enabled).toBe(false);
+    });
+
+    // Reset defaults restores 1 / 2s / enabled
+    await userEvent.click(screen.getByRole('button', { name: /Reset defaults/i }));
+    expect(mercariCount).toHaveValue(1);
+    expect(mercariWait).toHaveValue(2);
+    expect(ebayToggle).toBeChecked();
+  });
 });

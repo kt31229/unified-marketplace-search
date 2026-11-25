@@ -40,14 +40,21 @@ function formatStatusBadge(status: MarketplaceStatus): {
   toneClass: string;
 } {
   switch (status.runStatus) {
-    case 'running':
+    case 'running': {
+      const hasRetry = status.retryAttempt != null && status.retryMax != null;
+      if (status.completedCities != null && status.totalCities) {
+        return {
+          label: hasRetry
+            ? `City ${status.completedCities} of ${status.totalCities} · Retry ${status.retryAttempt}/${status.retryMax}`
+            : `City ${status.completedCities} of ${status.totalCities}`,
+          toneClass: 'status-badge-neutral',
+        };
+      }
       return {
-        label:
-          status.completedCities != null && status.totalCities
-            ? `City ${status.completedCities} of ${status.totalCities}`
-            : 'Running...',
+        label: hasRetry ? `Retrying (${status.retryAttempt}/${status.retryMax})...` : 'Running...',
         toneClass: 'status-badge-neutral',
       };
+    }
     case 'skipped_unsupported':
       return { label: 'Skipped (unsupported)', toneClass: 'status-badge-skip' };
     case 'unconfigured':

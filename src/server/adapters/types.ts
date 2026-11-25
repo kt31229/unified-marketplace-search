@@ -21,6 +21,7 @@ export interface AdapterExecutionContext {
   signal?: AbortSignal;
   clock?: ClockFn;
   sleep?: SleepFn;
+  allowAutoRetry?: boolean;
   onProgress?: (update: Partial<MarketplaceStatus>) => void;
   onBatch?: (batch: { listings: Listing[]; cityHub?: string; hasMore: boolean }) => void;
 }
@@ -49,6 +50,7 @@ export interface AdapterBatchResult {
   hasMore: boolean;
   nextCursor?: unknown;
   errorMessage?: string | null;
+  notices?: string[];
   completedCities?: number;
   totalCities?: number;
   currentCityLabel?: string | null;
