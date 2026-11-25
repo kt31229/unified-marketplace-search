@@ -4,6 +4,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BrowserSessionManager,
+  buildHeadlessUserAgent,
+  detectInstalledChromiumMajorVersion,
   type BrowserContextHandle,
   type BrowserPageHandle,
   type BrowserTransport,
@@ -137,7 +139,7 @@ afterEach(() => {
 });
 
 describe('BrowserSessionManager', () => {
-  it('launches lazily per Marketplace with off-screen headed args, reuses warm context, auto-closes on idle, and tears down on shutdown', async () => {
+  it('launches lazily per Marketplace with headless background args, reuses warm context, auto-closes on idle, and tears down on shutdown', async () => {
     vi.useFakeTimers();
     const dataDir = createTempDir();
     let channel: BrowserChannel = 'chrome';
@@ -154,7 +156,7 @@ describe('BrowserSessionManager', () => {
     expect(fake.launches).toHaveLength(0);
     expect(manager.isContextActive('poshmark')).toBe(false);
 
-    // First background usage launches poshmark profile off-screen
+    // First background usage launches poshmark profile in headless mode
     await manager.runInBackgroundPage('poshmark', async (page) => {
       await page.goto('https://poshmark.com/search?query=patagonia');
     });
@@ -163,8 +165,8 @@ describe('BrowserSessionManager', () => {
     expect(fake.launches[0]?.userDataDir).toBe(path.join(dataDir, 'profiles', 'poshmark'));
     expect(fake.launches[0]?.options).toEqual({
       channel: 'chrome',
-      headless: false,
-      args: ['--window-position=-2400,-2400', '--window-size=1280,900'],
+      headless: true,
+      args: ['--window-size=1280,900'],
       viewport: null,
     });
     expect(manager.isContextActive('poshmark')).toBe(true);
@@ -225,11 +227,13 @@ describe('BrowserSessionManager', () => {
     expect(fake.launches[0]?.closed).toBe(true);
     expect(fake.launches[1]?.closed).toBe(false);
     expect(fake.launches[1]?.options.headless).toBe(false);
-    expect(fake.launches[1]?.options.args).toEqual(['--window-size=1280,900']);
+    expect(fake.launches[1]?.options.args).toEqual(['--window-position=80,80', '--window-size=1280,900']);
     expect(fake.launches[1]?.pages[0]?.navigatedUrls).toEqual(['https://poshmark.com/']);
 
     const closeIdx = fake.events.indexOf('close:poshmark');
-    const secondLaunchIdx = fake.events.lastIndexOf('launch:poshmark:--window-size=1280,900');
+    const secondLaunchIdx = fake.events.lastIndexOf(
+      'launch:poshmark:--window-position=80,80,--window-size=1280,900',
+    );
     expect(closeIdx).toBeGreaterThan(-1);
     expect(secondLaunchIdx).toBeGreaterThan(closeIdx);
 
@@ -369,5 +373,32 @@ describe('BrowserSessionManager', () => {
     expect(fake.launches).toHaveLength(3);
 
     await manager.shutdown();
+  });
+
+  it('builds clean non-HeadlessChrome user agents and detects highest installed Chromium major version', () => {
+    const chromeUa = buildHeadlessUserAgent('chrome', 158);
+    expect(chromeUa).toContain('Chrome/158.0.0.0');
+    expect(chromeUa).not.toContain('HeadlessChrome');
+    expect(chromeUa).not.toContain('Edg/');
+
+    const edgeUa = buildHeadlessUserAgent('msedge', 136);
+    expect(edgeUa).toContain('Chrome/136.0.0.0');
+    expect(edgeUa).toContain('Edg/136.0.0.0');
+    expect(edgeUa).not.toContain('HeadlessChrome');
+
+    const root = createTempDir();
+    const chromeAppDir = path.win32.join(root, 'Google', 'Chrome', 'Application');
+    fs.mkdirSync(path.join(chromeAppDir, '136.0.7103.93'), { recursive: true });
+    fs.mkdirSync(path.join(chromeAppDir, '158.0.0.0'), { recursive: true });
+    fs.mkdirSync(path.join(chromeAppDir, 'Dictionaries'), { recursive: true });
+
+    const edgeAppDir = path.win32.join(root, 'Microsoft', 'Edge', 'Application');
+    fs.mkdirSync(path.join(edgeAppDir, '140.0.1.2'), { recursive: true });
+
+    const env = { ProgramFiles: root } as NodeJS.ProcessEnv;
+    expect(detectInstalledChromiumMajorVersion('chrome', 'win32', env)).toBe(158);
+    expect(detectInstalledChromiumMajorVersion('msedge', 'win32', env)).toBe(140);
+    expect(detectInstalledChromiumMajorVersion('chrome', 'linux', env)).toBeNull();
+    expect(detectInstalledChromiumMajorVersion('chrome', 'win32', {} as NodeJS.ProcessEnv)).toBeNull();
   });
 });

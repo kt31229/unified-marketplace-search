@@ -719,7 +719,7 @@ describe('MercariAdapter', () => {
 
     const transport: BrowserTransport = {
       async launchPersistentContext(_dir, options): Promise<BrowserContextHandle> {
-        const isBackground = options.args.some((a) => a.includes('-2400'));
+        const isBackground = options.headless;
         const rec = { isBackground, gotoUrls: [] as string[] };
         launches.push(rec);
         let currentUrl = 'about:blank';

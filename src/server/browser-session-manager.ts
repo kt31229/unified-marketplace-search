@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   BROWSER_MARKETPLACE_IDS,
   type BrowserChannel,
@@ -7,12 +8,12 @@ import {
 import type { ClockFn } from './adapters/types.ts';
 import { getProfileDir } from './paths.ts';
 
-export const OFFSCREEN_BROWSER_ARGS = [
-  '--window-position=-2400,-2400',
+export const BACKGROUND_BROWSER_ARGS = ['--window-size=1280,900'] as const;
+
+export const FOREGROUND_BROWSER_ARGS = [
+  '--window-position=80,80',
   '--window-size=1280,900',
 ] as const;
-
-export const FOREGROUND_BROWSER_ARGS = ['--window-size=1280,900'] as const;
 
 export const DEFAULT_BROWSER_IDLE_TIMEOUT_MS = 120_000;
 
@@ -123,14 +124,62 @@ interface ProfileSlot {
   lockChain: Promise<void>;
 }
 
+export function detectInstalledChromiumMajorVersion(
+  channel: BrowserChannel,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): number | null {
+  if (platform !== 'win32') {
+    return null;
+  }
+  const roots = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA];
+  const subPath =
+    channel === 'msedge'
+      ? ['Microsoft', 'Edge', 'Application']
+      : ['Google', 'Chrome', 'Application'];
+  let highest: number | null = null;
+
+  for (const root of roots) {
+    if (!root) continue;
+    const appDir = path.win32.join(root, ...subPath);
+    try {
+      for (const entry of fs.readdirSync(appDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const match = /^(\d+)\.\d+\.\d+\.\d+$/.exec(entry.name);
+        if (!match) continue;
+        const major = Number.parseInt(match[1]!, 10);
+        if (highest === null || major > highest) {
+          highest = major;
+        }
+      }
+    } catch {
+      // Directory missing or unreadable; continue checking other roots.
+    }
+  }
+
+  return highest;
+}
+
+export function buildHeadlessUserAgent(channel: BrowserChannel, majorVersion: number): string {
+  const base = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${majorVersion}.0.0.0 Safari/537.36`;
+  return channel === 'msedge' ? `${base} Edg/${majorVersion}.0.0.0` : base;
+}
+
 export function createPatchrightTransport(): BrowserTransport {
   return {
     async launchPersistentContext(userDataDir, options) {
       const { chromium } = await import('patchright');
+      const args = [...options.args];
+      if (options.headless && !args.some((arg) => arg.startsWith('--user-agent='))) {
+        const majorVersion = detectInstalledChromiumMajorVersion(options.channel);
+        if (majorVersion !== null) {
+          args.push(`--user-agent=${buildHeadlessUserAgent(options.channel, majorVersion)}`);
+        }
+      }
       const context = await chromium.launchPersistentContext(userDataDir, {
         channel: options.channel,
         headless: options.headless,
-        args: options.args,
+        args,
         viewport: options.viewport,
       });
       return context as unknown as BrowserContextHandle;
@@ -148,7 +197,7 @@ function validateSessionUrl(rawUrl: string): string {
 
 /**
  * Manages lazy, isolated patchright browser contexts per Marketplace with exclusive
- * profile locking, off-screen search windows, warm reuse with idle auto-close, and clean teardown.
+ * profile locking, headless background search contexts, warm reuse with idle auto-close, and clean teardown.
  */
 export class BrowserSessionManager {
   private readonly dataDir: string;
@@ -344,8 +393,8 @@ export class BrowserSessionManager {
         fs.mkdirSync(profileDir, { recursive: true });
         const context = await this.transport.launchPersistentContext(profileDir, {
           channel: desiredChannel,
-          headless: false,
-          args: [...OFFSCREEN_BROWSER_ARGS],
+          headless: true,
+          args: [...BACKGROUND_BROWSER_ARGS],
           viewport: null,
         });
         slot.context = context;

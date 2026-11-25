@@ -250,7 +250,7 @@ describe('Facebook Marketplace orchestrator & HTTP integration', () => {
         let currentUrl = 'about:blank';
         let currentHtml = '<html></html>';
         let currentTitle = 'Facebook Marketplace';
-        const isForeground = !options.args.some((a) => a.includes('-2400'));
+        const isForeground = !options.headless;
 
         const page: BrowserPageHandle = {
           async goto(url: string) {
