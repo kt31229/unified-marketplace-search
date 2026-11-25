@@ -7,7 +7,11 @@ export function BackToTopTab() {
     const update = () => setVisible(window.scrollY > window.innerHeight);
     update();
     window.addEventListener('scroll', update, { passive: true });
-    return () => window.removeEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
   }, []);
 
   const handleClick = () => {
