@@ -15,6 +15,7 @@ import {
   type WatchlistEntry,
   type WatchlistSnapshotInput,
 } from '../shared/index.ts';
+import { BackToTopTab } from './components/BackToTopTab.tsx';
 import { ConfirmDialog } from './components/ConfirmDialog.tsx';
 import { SaveSearchDialog } from './components/SaveSearchDialog.tsx';
 import { SavedSearchesPanel } from './components/SavedSearchesPanel.tsx';
@@ -568,6 +569,8 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
 
         {activeView === 'settings' && <SettingsView fetchImpl={fetchImpl} />}
       </main>
+
+      <BackToTopTab />
 
       <SaveSearchDialog
         open={saveDialogOpen}
