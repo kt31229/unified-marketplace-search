@@ -720,35 +720,37 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
                   />
                 </label>
 
-                <label className="flex flex-col gap-1 text-xs text-slate-700">
-                  <span>Retries (1–5)</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={5}
-                    step={1}
-                    disabled={!cfg.enabled}
-                    aria-label={`${label} retry count`}
-                    value={cfg.maxRetries}
-                    onChange={(e) => updateRetryField(mp, 'maxRetries', Number(e.target.value))}
-                    className="rounded border border-slate-300 bg-white px-2 py-1 text-xs tabular disabled:bg-slate-100 disabled:text-slate-400"
-                  />
-                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-700">
+                    <span>Retries (1–5)</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={5}
+                      step={1}
+                      disabled={!cfg.enabled}
+                      aria-label={`${label} retry count`}
+                      value={cfg.maxRetries}
+                      onChange={(e) => updateRetryField(mp, 'maxRetries', Number(e.target.value))}
+                      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs tabular disabled:bg-slate-100 disabled:text-slate-400"
+                    />
+                  </label>
 
-                <label className="flex flex-col gap-1 text-xs text-slate-700">
-                  <span>Wait (seconds)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={60}
-                    step="any"
-                    disabled={!cfg.enabled}
-                    aria-label={`${label} retry wait seconds`}
-                    value={cfg.delaySeconds}
-                    onChange={(e) => updateRetryField(mp, 'delaySeconds', Number(e.target.value))}
-                    className="rounded border border-slate-300 bg-white px-2 py-1 text-xs tabular disabled:bg-slate-100 disabled:text-slate-400"
-                  />
-                </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-700">
+                    <span>Wait (sec)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      step="any"
+                      disabled={!cfg.enabled}
+                      aria-label={`${label} retry wait seconds`}
+                      value={cfg.delaySeconds}
+                      onChange={(e) => updateRetryField(mp, 'delaySeconds', Number(e.target.value))}
+                      className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs tabular disabled:bg-slate-100 disabled:text-slate-400"
+                    />
+                  </label>
+                </div>
               </div>
             );
           })}
