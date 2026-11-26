@@ -170,6 +170,7 @@ function makeSettings(): AppSettings {
     homeFacebookCitySlug: 'seattle',
     facebookRadiusMiles: 500,
     facebookCityHubs: DEFAULT_FACEBOOK_CITY_HUBS,
+    facebookCooldownProfile: 'conservative',
     retrySettings: createDefaultMarketplaceRetrySettings(),
   };
 }

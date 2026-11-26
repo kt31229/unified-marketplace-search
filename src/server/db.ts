@@ -123,6 +123,15 @@ const MIGRATIONS: Migration[] = [
       stmt.run({ retrySettingsJson: defaults });
     },
   },
+  {
+    version: 5,
+    apply: (db) => {
+      db.exec(`ALTER TABLE app_settings ADD COLUMN facebook_cooldown_profile TEXT;`);
+      db.exec(
+        `UPDATE app_settings SET facebook_cooldown_profile = 'conservative' WHERE facebook_cooldown_profile IS NULL;`,
+      );
+    },
+  },
 ];
 
 export interface AppSettingsRow {
@@ -132,6 +141,7 @@ export interface AppSettingsRow {
   home_facebook_city_slug: string | null;
   facebook_radius_miles: number;
   facebook_city_hubs_json: string;
+  facebook_cooldown_profile: string | null;
   retry_settings_json: string | null;
 }
 
@@ -148,6 +158,7 @@ export class SettingsRepository {
           home_facebook_city_slug,
           facebook_radius_miles,
           facebook_city_hubs_json,
+          facebook_cooldown_profile,
           retry_settings_json
         FROM app_settings
         WHERE id = 1`,
@@ -165,6 +176,7 @@ export class SettingsRepository {
       homeFacebookCitySlug: row.home_facebook_city_slug,
       facebookRadiusMiles: row.facebook_radius_miles,
       facebookCityHubs: JSON.parse(row.facebook_city_hubs_json),
+      facebookCooldownProfile: row.facebook_cooldown_profile ?? 'conservative',
       retrySettings: row.retry_settings_json
         ? JSON.parse(row.retry_settings_json)
         : createDefaultMarketplaceRetrySettings(),
@@ -196,6 +208,7 @@ export class SettingsRepository {
         home_facebook_city_slug = :homeFacebookCitySlug,
         facebook_radius_miles = :facebookRadiusMiles,
         facebook_city_hubs_json = :facebookCityHubsJson,
+        facebook_cooldown_profile = :facebookCooldownProfile,
         retry_settings_json = :retrySettingsJson,
         updated_at = :updatedAt
       WHERE id = 1
@@ -208,6 +221,7 @@ export class SettingsRepository {
       homeFacebookCitySlug: merged.homeFacebookCitySlug,
       facebookRadiusMiles: merged.facebookRadiusMiles,
       facebookCityHubsJson: JSON.stringify(merged.facebookCityHubs),
+      facebookCooldownProfile: merged.facebookCooldownProfile,
       retrySettingsJson: JSON.stringify(merged.retrySettings),
       updatedAt: new Date().toISOString(),
     });

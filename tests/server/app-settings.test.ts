@@ -332,7 +332,7 @@ describe('createApp persistence and /api/settings', () => {
 
     const migrated = createApp({ dataDir: v3Dir, env: {} });
     activeApps.push(migrated);
-    expect(migrated.database.getUserVersion()).toBe(4);
+    expect(migrated.database.getUserVersion()).toBeGreaterThanOrEqual(4);
 
     const defaultsRes = await migrated.app.request('/api/settings');
     expect(defaultsRes.status).toBe(200);
@@ -387,5 +387,51 @@ describe('createApp persistence and /api/settings', () => {
     const reopenedRes = await reopened.app.request('/api/settings');
     const reopenedJson = await reopenedRes.json();
     expect(reopenedJson.settings.retrySettings).toEqual(customRetry);
+  });
+
+  it('defaults facebookCooldownProfile to conservative, validates options, and persists across restarts', async () => {
+    const dataDir = createTempDataDir();
+    const first = createApp({ dataDir, env: {} });
+    activeApps.push(first);
+
+    const defaultsRes = await first.app.request('/api/settings');
+    expect(defaultsRes.status).toBe(200);
+    const defaultsJson = await defaultsRes.json();
+    expect(defaultsJson.settings.facebookCooldownProfile).toBe('conservative');
+
+    const invalidRes = await first.app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        settings: {
+          facebookCooldownProfile: 'invalid-profile',
+        },
+      }),
+    });
+    expect(invalidRes.status).toBe(400);
+
+    const updateRes = await first.app.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        settings: {
+          facebookCooldownProfile: 'balanced',
+        },
+      }),
+    });
+    expect(updateRes.status).toBe(200);
+    const updateJson = await updateRes.json();
+    expect(updateJson.settings.facebookCooldownProfile).toBe('balanced');
+
+    await first.shutdown();
+    activeApps.pop();
+
+    const second = createApp({ dataDir, env: {} });
+    activeApps.push(second);
+
+    const reloadedRes = await second.app.request('/api/settings');
+    expect(reloadedRes.status).toBe(200);
+    const reloadedJson = await reloadedRes.json();
+    expect(reloadedJson.settings.facebookCooldownProfile).toBe('balanced');
   });
 });

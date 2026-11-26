@@ -319,4 +319,41 @@ describe('Workbench Sidebar and Settings UI', () => {
     expect(mercariWait).toHaveValue(2);
     expect(ebayToggle).toBeChecked();
   });
+
+  it('renders the Facebook City Hub cooldown dropdown before Open browser session and saves on change', async () => {
+    const { fetchMock, calls } = createFetchMock(createMockSettingsResponse());
+    render(<App fetchImpl={fetchMock} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Settings$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Browser Sessions & Profiles/i)).toBeInTheDocument();
+    });
+
+    const fbRow = screen.getByTestId('profile-row-facebook');
+    const cooldownSelect = within(fbRow).getByLabelText(/Hub sweep speed/i);
+    const openBtn = within(fbRow).getByRole('button', { name: /Open browser session/i });
+
+    expect(cooldownSelect).toHaveValue('conservative');
+    expect(Array.from(cooldownSelect.querySelectorAll('option')).map((o) => o.textContent)).toEqual(
+      ['Conservative (3–5s)', 'Balanced (1.5–3s)', 'Fast (1–2.5s)'],
+    );
+    expect(
+      Boolean(cooldownSelect.compareDocumentPosition(openBtn) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+
+    // Other Marketplace cards should not render the Facebook cooldown dropdown
+    expect(
+      within(screen.getByTestId('profile-row-poshmark')).queryByLabelText(/Hub sweep speed/i),
+    ).toBeNull();
+
+    await userEvent.selectOptions(cooldownSelect, 'balanced');
+
+    await waitFor(() => {
+      const putCall = calls.filter((c) => c.url === '/api/settings' && c.method === 'PUT').at(-1);
+      expect(putCall?.body).toEqual({
+        settings: { facebookCooldownProfile: 'balanced' },
+      });
+      expect(cooldownSelect).toHaveValue('balanced');
+    });
+  });
 });

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
   BROWSER_MARKETPLACE_IDS,
+  FACEBOOK_COOLDOWN_PROFILES,
+  FACEBOOK_COOLDOWN_PROFILE_IDS,
   MARKETPLACE_IDS,
   MARKETPLACE_LABELS,
   createDefaultFacebookCityHubs,
@@ -8,6 +10,7 @@ import {
   type BrowserChannel,
   type BrowserMarketplaceId,
   type FacebookCityHub,
+  type FacebookCooldownProfile,
   type MarketplaceId,
   type MarketplaceRetrySettings,
   type SettingsResponse,
@@ -48,6 +51,8 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
   const [retrySettings, setRetrySettings] = useState<MarketplaceRetrySettings>(
     createDefaultMarketplaceRetrySettings,
   );
+  const [facebookCooldownProfile, setFacebookCooldownProfile] =
+    useState<FacebookCooldownProfile>('conservative');
 
   // Profile Reset <dialog> state
   const [resetTarget, setResetTarget] = useState<BrowserMarketplaceId | null>(null);
@@ -63,6 +68,7 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     setDefaultRadiusMiles(res.settings.defaultLocalPickupRadiusMiles);
     setHomeFacebookCitySlug(res.settings.homeFacebookCitySlug ?? '');
     setHubs(res.settings.facebookCityHubs.map((h) => ({ ...h })));
+    setFacebookCooldownProfile(res.settings.facebookCooldownProfile ?? 'conservative');
     setRetrySettings(res.settings.retrySettings ?? createDefaultMarketplaceRetrySettings());
   };
 
@@ -175,6 +181,34 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     } else {
       setVerifyMessage(json.error ?? `Verification failed (${res.status}).`);
     }
+  };
+
+  const handleChangeFacebookCooldownProfile = async (nextProfile: FacebookCooldownProfile) => {
+    const prevProfile = facebookCooldownProfile;
+    setFacebookCooldownProfile(nextProfile);
+    setStatusMessage(null);
+    setErrorMessage(null);
+
+    const res = await fetchImpl('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        settings: {
+          facebookCooldownProfile: nextProfile,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      setFacebookCooldownProfile(prevProfile);
+      const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+      setErrorMessage(errJson.error ?? 'Failed to save Facebook City Hub sweep speed profile.');
+      return;
+    }
+
+    const updated = (await res.json()) as SettingsResponse;
+    syncFromResponse(updated);
+    setStatusMessage('Saved Facebook City Hub sweep speed profile.');
   };
 
   const handleSaveHubs = async () => {
@@ -784,7 +818,28 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
                         : 'Not initialized yet'}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-end">
+                  {mp === 'facebook' && (
+                    <label className="flex flex-col gap-1 text-xs text-slate-700">
+                      <span className="font-medium">Hub sweep speed</span>
+                      <select
+                        aria-label="Facebook City Hub sweep speed"
+                        value={facebookCooldownProfile}
+                        onChange={(e) =>
+                          handleChangeFacebookCooldownProfile(
+                            e.target.value as FacebookCooldownProfile,
+                          )
+                        }
+                        className="w-fit rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                      >
+                        {FACEBOOK_COOLDOWN_PROFILE_IDS.map((profileId) => (
+                          <option key={profileId} value={profileId}>
+                            {FACEBOOK_COOLDOWN_PROFILES[profileId].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <button
                     type="button"
                     disabled={openingProfile === mp}

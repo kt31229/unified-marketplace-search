@@ -281,6 +281,19 @@ export function createDefaultMarketplaceRetrySettings(): MarketplaceRetrySetting
   };
 }
 
+export const FACEBOOK_COOLDOWN_PROFILE_IDS = ['conservative', 'balanced', 'fast'] as const;
+export const FacebookCooldownProfileSchema = z.enum(FACEBOOK_COOLDOWN_PROFILE_IDS);
+export type FacebookCooldownProfile = z.infer<typeof FacebookCooldownProfileSchema>;
+
+export const FACEBOOK_COOLDOWN_PROFILES: Record<
+  FacebookCooldownProfile,
+  { label: string; minMs: number; maxMs: number }
+> = {
+  conservative: { label: 'Conservative (3–5s)', minMs: 3_000, maxMs: 5_000 },
+  balanced: { label: 'Balanced (1.5–3s)', minMs: 1_500, maxMs: 3_000 },
+  fast: { label: 'Fast (1–2.5s)', minMs: 1_000, maxMs: 2_500 },
+};
+
 export const AppSettingsSchema = z.object({
   browserChannel: BrowserChannelSchema,
   homePostalCode: z.string().trim().nullable(),
@@ -288,6 +301,7 @@ export const AppSettingsSchema = z.object({
   homeFacebookCitySlug: z.string().trim().nullable(),
   facebookRadiusMiles: z.number().int().positive().max(500).default(500),
   facebookCityHubs: z.array(FacebookCityHubSchema),
+  facebookCooldownProfile: FacebookCooldownProfileSchema.default('conservative'),
   retrySettings: MarketplaceRetrySettingsSchema.default(createDefaultMarketplaceRetrySettings),
 });
 
@@ -301,6 +315,7 @@ export function createDefaultAppSettings(): AppSettings {
     homeFacebookCitySlug: null,
     facebookRadiusMiles: 500,
     facebookCityHubs: createDefaultFacebookCityHubs(),
+    facebookCooldownProfile: 'conservative',
     retrySettings: createDefaultMarketplaceRetrySettings(),
   };
 }
