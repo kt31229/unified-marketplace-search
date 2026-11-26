@@ -14,4 +14,4 @@ Single-context layout (`GLOSSARY.md` and `docs/adr/` at the repo root). See `doc
 
 ### Local environment
 
-Before running git writes, spawning review subagents, working in worktrees, or running live smoke checks on Windows, read `docs/agents/local-env.md`.
+Before running git writes, verifying changes, spawning review subagents, working in worktrees, or running live smoke checks on Windows, read `docs/agents/local-env.md`.
