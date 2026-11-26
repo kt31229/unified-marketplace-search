@@ -9,13 +9,15 @@ Non-obvious constraints for agents running in this Windows workspace.
 
 ## Windows Sandbox Boundaries
 
-- Run `npm run check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and read-only `git` commands inside the standard sandbox (`BypassSandbox: false`).
+- Run `npm run check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and read-only `git` commands in the main repo inside the standard sandbox (`BypassSandbox: false`).
+- Inside a git worktree, `.git` points to the parent repo outside the worktree sandbox, so all `git` commands (including `git status` and `git diff`) require `BypassSandbox: true`.
 - Keep `BypassSandbox: true` limited to single, unchained commands that require host/network access: `git` write operations (`checkout`, `commit`, `merge`, `fetch`, `push`), `gh`, and `npm ci` / `npm install`.
 
 ## Testing and Live Smoke Boundaries
 
 - `npm test` is strictly offline and deterministic; `tests/setup.ts` blocks non-loopback `fetch` calls and real `patchright` browser launches.
 - Run live marketplace checks via `npm run smoke:live` with `UMS_DATA_DIR` pointed at a temporary directory so user profiles and SQLite state stay untouched.
+- Place temporary `npx tsx` diagnostic scripts that import workspace packages (`patchright`, `src/...`) under the gitignored `.scratch/` directory at the repo root so Node resolves workspace `node_modules` cleanly.
 
 ## Subagent Reviews
 

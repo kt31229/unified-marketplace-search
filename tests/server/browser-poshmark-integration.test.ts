@@ -76,7 +76,7 @@ function createTrackingTransport() {
   const transport: BrowserTransport = {
     async launchPersistentContext(userDataDir, options): Promise<BrowserContextHandle> {
       const idx = launches.length;
-      const mode = options.args.some((a) => a.includes('-2400')) ? 'bg' : 'fg';
+      const mode = options.headless ? 'bg' : 'fg';
       lifecycleEvents.push(`launch:${mode}:${idx}`);
       const rec = {
         userDataDir,
@@ -219,7 +219,8 @@ describe('createApp BrowserSessionManager + Poshmark integration', () => {
     expect(batch1[0]?.marketplaceListingId).toBe('pm-101');
     expect(batch1[0]?.shippingPrice).toBe(6.49);
     expect(launches).toHaveLength(1);
-    expect(launches[0]?.options.args).toContain('--window-position=-2400,-2400');
+    expect(launches[0]?.options.headless).toBe(true);
+    expect(launches[0]?.options.args).not.toContain('--window-position=-2400,-2400');
 
     // Settings reflects activeContext = true
     const settings1 = await (await instance.app.request('/api/settings')).json();
@@ -248,7 +249,7 @@ describe('createApp BrowserSessionManager + Poshmark integration', () => {
     expect(launches).toHaveLength(2);
     expect(launches[0]?.closed).toBe(true);
     expect(launches[1]?.closed).toBe(false);
-    expect(launches[1]?.options.args).toEqual(['--window-size=1280,900']);
+    expect(launches[1]?.options.args).toEqual(['--window-position=80,80', '--window-size=1280,900']);
     expect(launches[1]?.gotoUrls).toEqual(['https://poshmark.com/search?query=patagonia']);
     expect(lifecycleEvents.indexOf('close:bg:0')).toBeLessThan(
       lifecycleEvents.indexOf('launch:fg:1'),

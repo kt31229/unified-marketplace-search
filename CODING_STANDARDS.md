@@ -4,12 +4,11 @@ Judgement rules for code review. Mechanical formatting, unused imports, and type
 
 ## Domain Vocabulary (`GLOSSARY.md`)
 
-- Use canonical terms across UI copy, domain types, API payloads, tests, and docs: **Marketplace**, **Listing**, **Unified Filter**, **Marketplace Filter**, **Saved Search**, **Watchlist**, **Watchlist Entry**.
-- Flag avoided synonyms (`source`, `platform`, `site`, `item`, `product`, `post`, `result`, `preset`, `favorites`, `bookmarks`) when they name domain concepts.
+- Enforce all canonical terms and `_Avoid_` lists defined in `GLOSSARY.md` across UI copy, domain types, API payloads, tests, and docs.
 
 ## Architecture Alignment (`docs/adr/`)
 
-- Check changes against accepted ADRs (`docs/adr/0001`–`0005`).
+- Check changes against all accepted ADRs in `docs/adr/`.
 - Flag any contradiction explicitly rather than letting silent architectural drift land.
 
 ## Privacy and Security Boundaries
