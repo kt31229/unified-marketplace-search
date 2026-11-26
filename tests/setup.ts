@@ -1,4 +1,10 @@
+import { configure } from '@testing-library/dom';
 import { vi } from 'vitest';
+
+// Failed queries otherwise print the full DOM and role tree (~80KB per failure).
+configure({
+  getElementError: (message) => new Error(message ?? 'Testing Library query failed'),
+});
 
 const ALLOWED_LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
