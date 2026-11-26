@@ -66,7 +66,11 @@ function makeKey(marketplace: MarketplaceId, listingId: string): string {
 }
 
 function makeHashPrefix(marketplace: MarketplaceId, listingId: string): string {
-  return crypto.createHash('sha256').update(makeKey(marketplace, listingId)).digest('hex').slice(0, 24);
+  return crypto
+    .createHash('sha256')
+    .update(makeKey(marketplace, listingId))
+    .digest('hex')
+    .slice(0, 24);
 }
 
 export interface ThumbnailCacheDeps {
@@ -82,7 +86,10 @@ export interface ThumbnailCacheDeps {
 export class ThumbnailCache {
   private readonly thumbnailsDir: string;
   private readonly fetchImpl: FetchLike;
-  private readonly inFlight = new Map<string, { controller: AbortController; promise: Promise<void> }>();
+  private readonly inFlight = new Map<
+    string,
+    { controller: AbortController; promise: Promise<void> }
+  >();
   private disposed = false;
 
   constructor(private readonly deps: ThumbnailCacheDeps) {

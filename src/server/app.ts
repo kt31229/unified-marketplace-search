@@ -25,16 +25,8 @@ import { createEbayAdapter } from './adapters/ebay.ts';
 import { createFacebookAdapter } from './adapters/facebook.ts';
 import { createMercariAdapter } from './adapters/mercari.ts';
 import { createPoshmarkAdapter } from './adapters/poshmark.ts';
-import type {
-  ClockFn,
-  FetchLike,
-  MarketplaceAdapter,
-  SleepFn,
-} from './adapters/types.ts';
-import {
-  BrowserSessionManager,
-  type BrowserTransport,
-} from './browser-session-manager.ts';
+import type { ClockFn, FetchLike, MarketplaceAdapter, SleepFn } from './adapters/types.ts';
+import { BrowserSessionManager, type BrowserTransport } from './browser-session-manager.ts';
 import { openDatabase, type AppDatabase } from './db.ts';
 import { ensureBaseDirectories, getProfileDir, resolveDataDir } from './paths.ts';
 import { SearchOrchestrator } from './search-orchestrator.ts';
@@ -173,7 +165,8 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
   };
 
   const isBrowserActive =
-    deps.isBrowserContextActive ?? ((mp: BrowserMarketplaceId) => browserSessionManager.isContextActive(mp));
+    deps.isBrowserContextActive ??
+    ((mp: BrowserMarketplaceId) => browserSessionManager.isContextActive(mp));
 
   const buildSettingsResponse = (): SettingsResponse => ({
     settings: database.settings.getSettings(),
@@ -275,10 +268,7 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
 
     const parsed = SearchRequestSchema.safeParse(rawBody);
     if (!parsed.success) {
-      return c.json(
-        { error: 'Invalid search request', details: parsed.error.flatten() },
-        400,
-      );
+      return c.json({ error: 'Invalid search request', details: parsed.error.flatten() }, 400);
     }
 
     return streamSSE(c, async (stream) => {
@@ -302,10 +292,7 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
       const rawBody = await c.req.json();
       const parsed = LoadMoreRequestSchema.safeParse(rawBody);
       if (!parsed.success) {
-        return c.json(
-          { error: 'Invalid load-more request', details: parsed.error.flatten() },
-          400,
-        );
+        return c.json({ error: 'Invalid load-more request', details: parsed.error.flatten() }, 400);
       }
       marketplace = parsed.data.marketplace;
     } catch {
@@ -620,7 +607,9 @@ export function createApp(deps: CreateAppDeps = {}): AppInstance {
       if (relativePath) {
         const candidate = path.resolve(staticDir, relativePath);
         const insideStaticDir =
-          candidate.startsWith(staticDir + path.sep) && fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+          candidate.startsWith(staticDir + path.sep) &&
+          fs.existsSync(candidate) &&
+          fs.statSync(candidate).isFile();
         if (insideStaticDir) {
           const ext = path.extname(candidate).toLowerCase();
           const mime = contentTypes[ext] ?? 'application/octet-stream';

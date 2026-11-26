@@ -216,7 +216,9 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
                                               delivery_types: ['IN_PERSON', 'SHIPPING_ONSITE'],
                                               creation_time: 1732233600,
                                               primary_listing_photo: {
-                                                image: { uri: 'https://scontent.xx.fbcdn.net/fb-1.jpg' },
+                                                image: {
+                                                  uri: 'https://scontent.xx.fbcdn.net/fb-1.jpg',
+                                                },
                                               },
                                               location: {
                                                 reverse_geocode: { city: 'Seattle', state: 'WA' },
@@ -241,7 +243,9 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
                                               delivery_types: ['IN_PERSON'],
                                               creation_time: 1732147200,
                                               primary_listing_photo: {
-                                                image: { uri: 'https://scontent.xx.fbcdn.net/fb-2.jpg' },
+                                                image: {
+                                                  uri: 'https://scontent.xx.fbcdn.net/fb-2.jpg',
+                                                },
                                               },
                                               location: {
                                                 reverse_geocode: { city: 'Tacoma', state: 'WA' },
@@ -407,7 +411,9 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
       adapterRank: 1,
       hubSlug: 'seattle',
     });
-    expect('marketplace_listing_seller' in (page1.listings[0] as Record<string, unknown>)).toBe(false);
+    expect('marketplace_listing_seller' in (page1.listings[0] as Record<string, unknown>)).toBe(
+      false,
+    );
 
     expect(page1.listings[1]?.shippingType).toBe('local_pickup_only');
     expect(page1.listings[1]?.shippingPrice).toBeNull();
@@ -494,7 +500,11 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     });
 
     const sleepCalls: number[] = [];
-    const progressUpdates: Array<{ completedCities?: number; totalCities?: number; currentCityLabel?: string | null }> = [];
+    const progressUpdates: Array<{
+      completedCities?: number;
+      totalCities?: number;
+      currentCityLabel?: string | null;
+    }> = [];
     const streamedBatches: Array<{ cityHub?: string; ids: string[] }> = [];
 
     const bsm = new BrowserSessionManager({
@@ -541,9 +551,16 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
 
     expect(scripted.getLaunchCount()).toBe(1);
     expect(scripted.gotoUrls).toHaveLength(8);
-    expect(
-      scripted.gotoUrls.map((u) => u.match(/\/marketplace\/([^/]+)\/search\//)?.[1]),
-    ).toEqual(['seattle', 'sanfrancisco', 'la', 'denver', 'dallas', 'chicago', 'atlanta', 'nyc']);
+    expect(scripted.gotoUrls.map((u) => u.match(/\/marketplace\/([^/]+)\/search\//)?.[1])).toEqual([
+      'seattle',
+      'sanfrancisco',
+      'la',
+      'denver',
+      'dallas',
+      'chicago',
+      'atlanta',
+      'nyc',
+    ]);
 
     // 7 jittered cooldowns between 8 consecutive navigations, all within 3000-5000ms
     expect(sleepCalls).toHaveLength(7);
@@ -617,7 +634,8 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
         }
         // Hub 2 hits Facebook security checkpoint
         return {
-          finalUrl: 'https://www.facebook.com/checkpoint/?next=https://www.facebook.com/marketplace',
+          finalUrl:
+            'https://www.facebook.com/checkpoint/?next=https://www.facebook.com/marketplace',
           title: 'Security Check Required',
           html: '<html><body><div id="checkpoint_title">Confirm your identity</div></body></html>',
         };
@@ -977,7 +995,10 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     expect(sleepCalls).toHaveLength(1);
     expect(sleepCalls[0]).toBeGreaterThanOrEqual(3000);
     expect(sleepCalls[0]).toBeLessThanOrEqual(5000);
-    expect(progressUpdates.map((p) => `${p.completedCities}/${p.totalCities}`)).toEqual(['1/2', '2/2']);
+    expect(progressUpdates.map((p) => `${p.completedCities}/${p.totalCities}`)).toEqual([
+      '1/2',
+      '2/2',
+    ]);
     expect(streamedBatches).toEqual([
       { cityHub: 'seattle', ids: ['seattle-p2', 'shared-p2-dup'] },
       { cityHub: 'la', ids: ['la-p2'] },
@@ -1040,7 +1061,8 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     // 1. Mid-sweep challenge on hub 2 of 3 aborts immediately and retains hub 1 listings
     const scrolledChallenge: string[] = [];
     const challengeTransport = createScriptedFacebookTransport({
-      stepsByUrl: (url) => makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
+      stepsByUrl: (url) =>
+        makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
       onScrollLoadMore: async (_idx, currentUrl) => {
         const hubSlug = currentUrl.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
         scrolledChallenge.push(hubSlug);
@@ -1112,7 +1134,8 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
 
     // 2. Non-challenge parse_error on hub 1 of 2 continues to hub 2
     const faultTransport = createScriptedFacebookTransport({
-      stepsByUrl: (url) => makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
+      stepsByUrl: (url) =>
+        makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
       onScrollLoadMore: async (_idx, currentUrl) => {
         const hubSlug = currentUrl.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
         if (hubSlug === 'seattle') {
@@ -1182,7 +1205,8 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     // 3. Aborting context.signal during cooldown returns stoppedByUser: true and retains hub 1 listings
     const abortController = new AbortController();
     const abortTransport = createScriptedFacebookTransport({
-      stepsByUrl: (url) => makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
+      stepsByUrl: (url) =>
+        makeInitialStep(url.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown'),
       onScrollLoadMore: async (_idx, currentUrl) => {
         const hubSlug = currentUrl.match(/\/marketplace\/([^/]+)\/search\//)?.[1] ?? 'unknown';
         return {
@@ -1293,7 +1317,11 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     let sfAttempts = 0;
     let laLoadMoreAttempts = 0;
     const sleepCalls: number[] = [];
-    const progressUpdates: Array<{ currentCityLabel?: string | null; retryAttempt?: number; retryMax?: number }> = [];
+    const progressUpdates: Array<{
+      currentCityLabel?: string | null;
+      retryAttempt?: number;
+      retryMax?: number;
+    }> = [];
 
     const scripted = createScriptedFacebookTransport({
       stepsByUrl: (url) => {
@@ -1414,7 +1442,12 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     expect(adapter.isChallengeLatched()).toBe(false);
     expect(initRes.completedCities).toBe(3);
     expect(initRes.notices).toContain('San Francisco, CA succeeded after 1 automatic retry.');
-    expect(progressUpdates.some((p) => p.currentCityLabel === 'San Francisco, CA' && p.retryAttempt === 1 && p.retryMax === 1)).toBe(true);
+    expect(
+      progressUpdates.some(
+        (p) =>
+          p.currentCityLabel === 'San Francisco, CA' && p.retryAttempt === 1 && p.retryMax === 1,
+      ),
+    ).toBe(true);
 
     // loadMore also retries LA hub when it hits auth error on attempt 1
     const lmRes = await adapter.loadMore({

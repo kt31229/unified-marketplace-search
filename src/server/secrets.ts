@@ -118,9 +118,7 @@ export class SecretsStore {
     const currentFile = this.readFileEbay();
     const rawClientId = input.clientId !== undefined ? input.clientId : input.client_id;
     const nextClientId =
-      rawClientId === null
-        ? ''
-        : (rawClientId?.trim() ?? currentFile.clientId ?? '');
+      rawClientId === null ? '' : (rawClientId?.trim() ?? currentFile.clientId ?? '');
 
     const rawSecret = input.clientSecret !== undefined ? input.clientSecret : input.client_secret;
     const trimmedSecret = rawSecret?.trim();

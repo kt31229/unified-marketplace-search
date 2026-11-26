@@ -248,7 +248,7 @@ describe('Search streaming orchestrator & HTTP API', () => {
       (e) => e.event === 'listings_batch' && e.data.marketplace === 'ebay',
     );
     expect(ebayBatch).toBeDefined();
-    expect((ebayBatch?.data.listings as Listing[])).toHaveLength(1);
+    expect(ebayBatch?.data.listings as Listing[]).toHaveLength(1);
     expect((ebayBatch?.data.listings as Listing[])[0]?.marketplaceListingId).toBe('e1');
 
     const runComplete = events.find((e) => e.event === 'run_complete');
@@ -352,7 +352,8 @@ describe('Search streaming orchestrator & HTTP API', () => {
     });
     expect(retryRes.status).toBe(200);
     const retryEvents = await readSseEvents(retryRes);
-    const retryBatch = retryEvents.find((e) => e.event === 'listings_batch')?.data.listings as Listing[];
+    const retryBatch = retryEvents.find((e) => e.event === 'listings_batch')?.data
+      .listings as Listing[];
     expect(initialCalls).toBe(3);
     expect(retryBatch[0]?.marketplaceListingId).toBe('p1-3');
 
@@ -364,7 +365,8 @@ describe('Search streaming orchestrator & HTTP API', () => {
     });
     expect(loadMoreRes.status).toBe(200);
     const loadMoreEvents = await readSseEvents(loadMoreRes);
-    const lmBatch = loadMoreEvents.find((e) => e.event === 'listings_batch')?.data.listings as Listing[];
+    const lmBatch = loadMoreEvents.find((e) => e.event === 'listings_batch')?.data
+      .listings as Listing[];
     expect(loadMoreCalls).toBe(1);
     expect(lmBatch[0]?.marketplaceListingId).toBe('p2-1');
 
@@ -727,7 +729,8 @@ describe('Search streaming orchestrator & HTTP API', () => {
     const retryStatusEvents = events.filter(
       (e) =>
         e.event === 'marketplace_status' &&
-        (e.data.status as { marketplace: string; retryAttempt?: number }).marketplace === 'mercari' &&
+        (e.data.status as { marketplace: string; retryAttempt?: number }).marketplace ===
+          'mercari' &&
         (e.data.status as { retryAttempt?: number }).retryAttempt === 1,
     );
     expect(retryStatusEvents.length).toBeGreaterThanOrEqual(1);
@@ -754,7 +757,10 @@ describe('Search streaming orchestrator & HTTP API', () => {
     const lmEvents = await readSseEvents(lmRes);
     const lmComplete = lmEvents.find((e) => e.event === 'run_complete');
     const lmMercari = (
-      lmComplete?.data.statuses as Record<string, { runStatus: string; errorMessage?: string | null }>
+      lmComplete?.data.statuses as Record<
+        string,
+        { runStatus: string; errorMessage?: string | null }
+      >
     ).mercari;
     expect(lmMercari?.runStatus).toBe('timeout');
     expect(lmMercari?.errorMessage).toBe('Failed after 1 automatic retry: Timed out on page 2');
@@ -781,7 +787,10 @@ describe('Search streaming orchestrator & HTTP API', () => {
     expect(sleepCalls).toEqual([2000, 2000]);
     const manualComplete = manualEvents.find((e) => e.event === 'run_complete');
     const manualMercari = (
-      manualComplete?.data.statuses as Record<string, { runStatus: string; errorMessage?: string | null }>
+      manualComplete?.data.statuses as Record<
+        string,
+        { runStatus: string; errorMessage?: string | null }
+      >
     ).mercari;
     expect(manualMercari?.errorMessage).toBe('Bad JSON');
   });

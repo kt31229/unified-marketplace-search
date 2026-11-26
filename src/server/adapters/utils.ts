@@ -75,9 +75,7 @@ export function isTimeoutError(err: unknown): boolean {
   }
   if (err instanceof Error) {
     return (
-      err.name === 'TimeoutError' ||
-      /timeout/i.test(err.message) ||
-      /timed out/i.test(err.message)
+      err.name === 'TimeoutError' || /timeout/i.test(err.message) || /timed out/i.test(err.message)
     );
   }
   return false;
@@ -169,8 +167,7 @@ export function summarizeUpstreamError(rawBody: unknown): string | null {
     }
   }
 
-  const topMsg =
-    pickNonEmptyString(record.message) ?? pickNonEmptyString(record.error_description);
+  const topMsg = pickNonEmptyString(record.message) ?? pickNonEmptyString(record.error_description);
   return topMsg ? truncateSummary(topMsg) : null;
 }
 

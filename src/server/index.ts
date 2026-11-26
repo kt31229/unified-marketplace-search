@@ -36,9 +36,7 @@ export async function runServerEntrypoint(
   const port = parseServerPort(env.UMS_PORT);
   const url = buildLocalUrl(port);
   const noOpen =
-    argv.includes('--no-open') ||
-    env.UMS_NO_OPEN === '1' ||
-    env.UMS_NO_OPEN === 'true';
+    argv.includes('--no-open') || env.UMS_NO_OPEN === '1' || env.UMS_NO_OPEN === 'true';
 
   const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   const probeTimeoutMs = options.probeTimeoutMs ?? 1_500;

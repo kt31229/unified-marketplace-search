@@ -41,9 +41,7 @@ function createMockSettingsResponse(): SettingsResponse {
 }
 
 function encodeSse(events: Array<{ event: string; data: unknown }>): string {
-  return events
-    .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`)
-    .join('');
+  return events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('');
 }
 
 function createSseResponse(events: Array<{ event: string; data: unknown }>): Response {
@@ -68,10 +66,7 @@ function makeDiagnostics(
     map[mp] = {
       marketplace: mp,
       status: mp === 'ebay' ? 'broadened' : 'exact',
-      notices:
-        mp === 'ebay'
-          ? ['Included eBay general Used (3000) alongside granular tiers.']
-          : [],
+      notices: mp === 'ebay' ? ['Included eBay general Used (3000) alongside granular tiers.'] : [],
       nativeSearchUrl: `https://example.com/search/${mp}`,
     };
   }
@@ -88,10 +83,7 @@ function makeStatuses(
       marketplace: mp,
       runStatus: mp === 'ebay' ? 'success' : 'unconfigured',
       translationStatus: mp === 'ebay' ? 'broadened' : 'exact',
-      notices:
-        mp === 'ebay'
-          ? ['Included eBay general Used (3000) alongside granular tiers.']
-          : [],
+      notices: mp === 'ebay' ? ['Included eBay general Used (3000) alongside granular tiers.'] : [],
       nativeSearchUrl: `https://example.com/search/${mp}`,
       loadedCount: mp === 'ebay' ? 2 : 0,
       droppedMalformedCount: 0,
@@ -208,7 +200,9 @@ describe('Search Workbench UI', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
-      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+      const body = init?.body
+        ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+        : undefined;
       calls.push({ url, method, body });
 
       if (url === '/api/settings') {
@@ -216,7 +210,12 @@ describe('Search Workbench UI', () => {
       }
 
       if (url === '/api/searches/stream') {
-        const requestedMps = (body?.marketplaces as MarketplaceId[]) ?? ['ebay', 'poshmark', 'mercari', 'facebook'];
+        const requestedMps = (body?.marketplaces as MarketplaceId[]) ?? [
+          'ebay',
+          'poshmark',
+          'mercari',
+          'facebook',
+        ];
         return createSseResponse([
           {
             event: 'run_started',
@@ -358,7 +357,9 @@ describe('Search Workbench UI', () => {
     await waitFor(() => {
       expect(screen.getByText('Patagonia R1 Fleece')).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /No more Listings|Load more Listings/i })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /No more Listings|Load more Listings/i }),
+    ).toBeDisabled();
 
     // Click Refresh -> sends refresh: true
     await userEvent.click(screen.getByRole('button', { name: /^Refresh$/i }));
@@ -366,11 +367,22 @@ describe('Search Workbench UI', () => {
       const refreshCall = calls.filter((c) => c.url === '/api/searches/stream').at(-1);
       expect(refreshCall?.body?.refresh).toBe(true);
       expect(refreshCall?.body?.sortOrder).toBe('price_asc');
-      expect((refreshCall?.body?.unifiedFilters as { conditions: string[]; fulfillment: string; localPickupRadiusMiles: number }).conditions).toEqual([
-        'like_new',
-      ]);
-      expect((refreshCall?.body?.unifiedFilters as { fulfillment: string }).fulfillment).toBe('local_pickup');
-      expect((refreshCall?.body?.unifiedFilters as { localPickupRadiusMiles: number }).localPickupRadiusMiles).toBe(25);
+      expect(
+        (
+          refreshCall?.body?.unifiedFilters as {
+            conditions: string[];
+            fulfillment: string;
+            localPickupRadiusMiles: number;
+          }
+        ).conditions,
+      ).toEqual(['like_new']);
+      expect((refreshCall?.body?.unifiedFilters as { fulfillment: string }).fulfillment).toBe(
+        'local_pickup',
+      );
+      expect(
+        (refreshCall?.body?.unifiedFilters as { localPickupRadiusMiles: number })
+          .localPickupRadiusMiles,
+      ).toBe(25);
     });
   });
 
@@ -379,7 +391,9 @@ describe('Search Workbench UI', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
-      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+      const body = init?.body
+        ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+        : undefined;
       calls.push({ url, method, body });
 
       if (url === '/api/settings') {
@@ -469,7 +483,9 @@ describe('Search Workbench UI', () => {
 
     render(<App fetchImpl={fetchMock} />);
     await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
-    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }));
+    await userEvent.click(
+      within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }),
+    );
 
     const poshCard = await screen.findByTestId('status-card-poshmark');
     await waitFor(() => {
@@ -616,10 +632,10 @@ describe('Search Workbench UI', () => {
         );
         streamController?.close();
 
-        return new Response(
-          JSON.stringify({ ok: true, stopped: true, status: stoppedStatus }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
+        return new Response(JSON.stringify({ ok: true, stopped: true, status: stoppedStatus }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       throw new Error(`Unexpected request: ${method} ${url}`);
@@ -627,7 +643,9 @@ describe('Search Workbench UI', () => {
 
     render(<App fetchImpl={fetchMock} />);
     await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
-    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }));
+    await userEvent.click(
+      within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }),
+    );
 
     const fbCard = await screen.findByTestId('status-card-facebook');
     await waitFor(() => {
@@ -713,7 +731,9 @@ describe('Search Workbench UI', () => {
 
     render(<App fetchImpl={fetchMock} />);
     await userEvent.type(screen.getByLabelText(/Search keywords/i), 'patagonia');
-    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }));
+    await userEvent.click(
+      within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }),
+    );
 
     const mercariCard = await screen.findByTestId('status-card-mercari');
     const fbCard = await screen.findByTestId('status-card-facebook');
@@ -748,8 +768,12 @@ describe('Search Workbench UI', () => {
     (closeStream as (() => void) | null)?.();
 
     await waitFor(() => {
-      expect(within(mercariCard).getByText(/Succeeded after 1 automatic retry\./i)).toBeInTheDocument();
-      expect(within(fbCard).getByText(/Failed after 2 automatic retries: Timeout/i)).toBeInTheDocument();
+      expect(
+        within(mercariCard).getByText(/Succeeded after 1 automatic retry\./i),
+      ).toBeInTheDocument();
+      expect(
+        within(fbCard).getByText(/Failed after 2 automatic retries: Timeout/i),
+      ).toBeInTheDocument();
     });
   });
 });

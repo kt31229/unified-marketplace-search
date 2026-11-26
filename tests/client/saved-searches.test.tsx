@@ -102,7 +102,9 @@ function createSavedSearchFetchMock(initialSaved: SavedSearch[] = []) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     const method = init?.method ?? 'GET';
-    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+    const body = init?.body
+      ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+      : undefined;
     calls.push({ url, method, body });
 
     if (url === '/api/settings' && method === 'GET') {
@@ -356,7 +358,9 @@ describe('Saved Searches Sidebar UI', () => {
         calls.some((c) => c.url === '/api/saved-searches/saved-older/run' && c.method === 'POST'),
       ).toBe(true);
       expect(screen.getByText('fujifilm x100v Result')).toBeInTheDocument();
-      expect(within(screen.getByTestId('status-card-ebay')).getByText(/Unconfigured/i)).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId('status-card-ebay')).getByText(/Unconfigured/i),
+      ).toBeInTheDocument();
     });
 
     // Order in sidebar MUST remain unchanged!
@@ -411,12 +415,16 @@ describe('Saved Searches Sidebar UI', () => {
     expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
 
     // Click "Update Saved Search" -> PATCH updates stored entry and clears dirty state
-    await userEvent.click(within(dirtyBanner).getByRole('button', { name: /Update Saved Search/i }));
+    await userEvent.click(
+      within(dirtyBanner).getByRole('button', { name: /Update Saved Search/i }),
+    );
     await waitFor(() => {
+      expect(calls.some((c) => c.url === '/api/saved-searches/s-2' && c.method === 'PATCH')).toBe(
+        true,
+      );
       expect(
-        calls.some((c) => c.url === '/api/saved-searches/s-2' && c.method === 'PATCH'),
-      ).toBe(true);
-      expect(within(savedRegion).queryByTestId('saved-search-dirty-banner')).not.toBeInTheDocument();
+        within(savedRegion).queryByTestId('saved-search-dirty-banner'),
+      ).not.toBeInTheDocument();
     });
 
     // Modify Unified Filter -> dirty again, click "Save as New" -> creates new entry without overwriting s-2
@@ -470,9 +478,9 @@ describe('Saved Searches Sidebar UI', () => {
 
     await waitFor(() => {
       expect(within(savedRegion).queryByText('Saved Item 4')).not.toBeInTheDocument();
-      expect(
-        calls.some((c) => c.url === '/api/saved-searches/s-4' && c.method === 'DELETE'),
-      ).toBe(true);
+      expect(calls.some((c) => c.url === '/api/saved-searches/s-4' && c.method === 'DELETE')).toBe(
+        true,
+      );
     });
   });
 });

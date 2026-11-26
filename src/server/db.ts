@@ -246,7 +246,9 @@ function mapWatchlistRow(row: WatchlistEntryRow): WatchlistEntry {
 export class WatchlistRepository {
   constructor(private readonly db: DatabaseSync) {}
 
-  listEntries(options: { marketplace?: MarketplaceId; sort?: WatchlistSortOrder } = {}): WatchlistEntry[] {
+  listEntries(
+    options: { marketplace?: MarketplaceId; sort?: WatchlistSortOrder } = {},
+  ): WatchlistEntry[] {
     let rows: WatchlistEntryRow[];
     if (options.marketplace) {
       const stmt = this.db.prepare(`
@@ -472,7 +474,9 @@ export interface AppDatabase {
 }
 
 function runMigrations(db: DatabaseSync): void {
-  const versionRow = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
+  const versionRow = db.prepare('PRAGMA user_version').get() as
+    | { user_version: number }
+    | undefined;
   let currentVersion = versionRow?.user_version ?? 0;
 
   for (const migration of MIGRATIONS) {

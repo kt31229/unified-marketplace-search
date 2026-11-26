@@ -235,7 +235,12 @@ describe('Facebook Marketplace orchestrator & HTTP integration', () => {
     expect(gotoUrls).toHaveLength(1); // Only Seattle navigated; SF and LA aborted
 
     const runComplete = events.find((e) => e.event === 'run_complete');
-    const fbStatus = (runComplete?.data.statuses as Record<string, { runStatus: string; stoppedByUser?: boolean; loadedCount: number }>).facebook;
+    const fbStatus = (
+      runComplete?.data.statuses as Record<
+        string,
+        { runStatus: string; stoppedByUser?: boolean; loadedCount: number }
+      >
+    ).facebook;
     expect(fbStatus?.runStatus).toBe('success');
     expect(fbStatus?.stoppedByUser).toBe(true);
     expect(fbStatus?.loadedCount).toBe(1);
@@ -337,7 +342,9 @@ describe('Facebook Marketplace orchestrator & HTTP integration', () => {
       'fb-seattle',
     );
     const complete1 = events1.find((e) => e.event === 'run_complete');
-    const fb1 = (complete1?.data.statuses as Record<string, { runStatus: string; loadedCount: number }>).facebook;
+    const fb1 = (
+      complete1?.data.statuses as Record<string, { runStatus: string; loadedCount: number }>
+    ).facebook;
     expect(fb1?.runStatus).toBe('challenge_or_auth_required');
     expect(fb1?.loadedCount).toBe(1);
     expect(gotoUrls).toHaveLength(3); // seattle + sanfrancisco (initial + 1 auto-retry), la never visited
@@ -370,7 +377,9 @@ describe('Facebook Marketplace orchestrator & HTTP integration', () => {
     expect(retryRes.status).toBe(200);
     const retryEvents = await readSseEvents(retryRes);
     const retryComplete = retryEvents.find((e) => e.event === 'run_complete');
-    const fbRetry = (retryComplete?.data.statuses as Record<string, { runStatus: string; loadedCount: number }>).facebook;
+    const fbRetry = (
+      retryComplete?.data.statuses as Record<string, { runStatus: string; loadedCount: number }>
+    ).facebook;
     expect(fbRetry?.runStatus).toBe('success');
     expect(fbRetry?.loadedCount).toBe(3);
   });

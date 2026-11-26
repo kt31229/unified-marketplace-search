@@ -285,7 +285,10 @@ export class SearchOrchestrator {
     const delayMs = Math.round(retryConfig.delaySeconds * 1000);
     const signal =
       params.marketplace === 'facebook'
-        ? AbortSignal.any([params.run.abortController.signal, params.run.facebookAbortController.signal])
+        ? AbortSignal.any([
+            params.run.abortController.signal,
+            params.run.facebookAbortController.signal,
+          ])
         : params.run.abortController.signal;
 
     for (let attempt = 0; ; attempt += 1) {
@@ -399,13 +402,7 @@ export class SearchOrchestrator {
 
     const adapter = this.adapters[marketplace];
     const settings = this.getSettings();
-    const cacheKey = buildCacheKey(
-      marketplace,
-      run.keywords,
-      run.unifiedFilters,
-      run.sortOrder,
-      1,
-    );
+    const cacheKey = buildCacheKey(marketplace, run.keywords, run.unifiedFilters, run.sortOrder, 1);
 
     let streamedIncrementally = false;
     let retriesUsed = 0;
@@ -477,9 +474,7 @@ export class SearchOrchestrator {
       ...mpState.status,
       runStatus: finalRunStatus,
       notices: nextNotices,
-      loadedCount: streamedIncrementally
-        ? mpState.status.loadedCount
-        : filteredListings.length,
+      loadedCount: streamedIncrementally ? mpState.status.loadedCount : filteredListings.length,
       droppedMalformedCount: result.droppedMalformedCount,
       errorMessage: nextErrorMessage,
       completedCities: result.completedCities,
@@ -654,7 +649,8 @@ export class SearchOrchestrator {
           streamedIncrementally = execution.streamedIncrementally;
           retriesUsed = execution.retriesUsed;
 
-          const stoppedEarly = mp === 'facebook' && (run.facebookStoppedByUser || Boolean(result.stoppedByUser));
+          const stoppedEarly =
+            mp === 'facebook' && (run.facebookStoppedByUser || Boolean(result.stoppedByUser));
           if (!run.abortController.signal.aborted && !stoppedEarly) {
             this.setCached(cacheKey, result);
           }
@@ -675,9 +671,7 @@ export class SearchOrchestrator {
           ? mpState.status.loadedCount
           : mpState.status.loadedCount + filtered.length;
         const nextRunStatus =
-          result.runStatus === 'empty' && nextLoadedCount > 0
-            ? 'success'
-            : result.runStatus;
+          result.runStatus === 'empty' && nextLoadedCount > 0 ? 'success' : result.runStatus;
         const { notices: nextNotices, errorMessage: nextErrorMessage } = mergeRetryDiagnostics(
           mpState.status.notices,
           result.notices,
@@ -690,7 +684,8 @@ export class SearchOrchestrator {
           runStatus: nextRunStatus,
           notices: nextNotices,
           loadedCount: nextLoadedCount,
-          droppedMalformedCount: mpState.status.droppedMalformedCount + result.droppedMalformedCount,
+          droppedMalformedCount:
+            mpState.status.droppedMalformedCount + result.droppedMalformedCount,
           errorMessage: nextErrorMessage,
           completedCities: result.completedCities ?? mpState.status.completedCities,
           totalCities: result.totalCities ?? mpState.status.totalCities,
@@ -792,12 +787,9 @@ export class SearchOrchestrator {
 
     const settings = this.getSettings();
     const adapter = this.adapters[marketplace];
-    const translation = adapter.translateFilters(
-      run.keywords,
-      run.unifiedFilters,
-      run.sortOrder,
-      { settings },
-    );
+    const translation = adapter.translateFilters(run.keywords, run.unifiedFilters, run.sortOrder, {
+      settings,
+    });
     const initialStatus = createInitialStatus(translation);
 
     run.marketplaces.set(marketplace, {

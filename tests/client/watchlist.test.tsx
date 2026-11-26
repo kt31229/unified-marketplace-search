@@ -79,7 +79,9 @@ function createWatchlistFetchMock(initialEntries: WatchlistEntry[]) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     const method = init?.method ?? 'GET';
-    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+    const body = init?.body
+      ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+      : undefined;
     calls.push({ url, method, body });
 
     if (url === '/api/settings') {
@@ -233,7 +235,9 @@ describe('Watchlist UI and synchronized Listing card toggle', () => {
 
     // Run a search
     await userEvent.type(screen.getByLabelText(/Search keywords/i), 'polaroid');
-    await userEvent.click(within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }));
+    await userEvent.click(
+      within(screen.getByRole('main')).getByRole('button', { name: /^Search$/i }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Vintage Polaroid SX-70 Camera')).toBeInTheDocument();
@@ -329,13 +333,11 @@ describe('Watchlist UI and synchronized Listing card toggle', () => {
 
     // Default sort: savedAt desc -> Cashmere Scarf (11:00), Ceramic Mug Set (10:00), Mid-Century Lamp (09:00)
     const getTitlesInOrder = () =>
-      screen.getAllByTestId('watchlist-card').map((card) => within(card).getByRole('heading').textContent);
+      screen
+        .getAllByTestId('watchlist-card')
+        .map((card) => within(card).getByRole('heading').textContent);
 
-    expect(getTitlesInOrder()).toEqual([
-      'Cashmere Scarf',
-      'Ceramic Mug Set',
-      'Mid-Century Lamp',
-    ]);
+    expect(getTitlesInOrder()).toEqual(['Cashmere Scarf', 'Ceramic Mug Set', 'Mid-Century Lamp']);
 
     // Verify image priority: cachedThumbnailPath -> /api/thumbnails/fb1hash.jpg
     const lampCard = screen.getByTestId('watchlist-card-facebook-fb-1');
@@ -359,27 +361,18 @@ describe('Watchlist UI and synchronized Listing card toggle', () => {
     });
 
     // Direct link-out present
-    expect(within(lampCard).getByRole('link', { name: /Open on Facebook Marketplace/i })).toHaveAttribute(
-      'href',
-      'https://www.facebook.com/marketplace/item/fb-1/',
-    );
+    expect(
+      within(lampCard).getByRole('link', { name: /Open on Facebook Marketplace/i }),
+    ).toHaveAttribute('href', 'https://www.facebook.com/marketplace/item/fb-1/');
 
     // Sort price_asc -> Ceramic Mug Set ($24), Mid-Century Lamp ($85), Cashmere Scarf (null at bottom)
     const sortSelect = screen.getByLabelText(/Sort Watchlist/i);
     await userEvent.selectOptions(sortSelect, 'price_asc');
-    expect(getTitlesInOrder()).toEqual([
-      'Ceramic Mug Set',
-      'Mid-Century Lamp',
-      'Cashmere Scarf',
-    ]);
+    expect(getTitlesInOrder()).toEqual(['Ceramic Mug Set', 'Mid-Century Lamp', 'Cashmere Scarf']);
 
     // Sort price_desc -> Mid-Century Lamp ($85), Ceramic Mug Set ($24), Cashmere Scarf (null STILL at bottom)
     await userEvent.selectOptions(sortSelect, 'price_desc');
-    expect(getTitlesInOrder()).toEqual([
-      'Mid-Century Lamp',
-      'Ceramic Mug Set',
-      'Cashmere Scarf',
-    ]);
+    expect(getTitlesInOrder()).toEqual(['Mid-Century Lamp', 'Ceramic Mug Set', 'Cashmere Scarf']);
 
     // Filter by Marketplace
     const mpFilter = screen.getByLabelText(/Filter by Marketplace/i);

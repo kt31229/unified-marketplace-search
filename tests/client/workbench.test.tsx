@@ -4,19 +4,14 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/client/App.tsx';
-import {
-  createDefaultAppSettings,
-  type SettingsResponse,
-} from '../../src/shared/index.ts';
+import { createDefaultAppSettings, type SettingsResponse } from '../../src/shared/index.ts';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
-function createMockSettingsResponse(
-  overrides: Partial<SettingsResponse> = {},
-): SettingsResponse {
+function createMockSettingsResponse(overrides: Partial<SettingsResponse> = {}): SettingsResponse {
   return {
     settings: createDefaultAppSettings(),
     ebay: {
@@ -188,9 +183,7 @@ describe('Workbench Sidebar and Settings UI', () => {
     await userEvent.click(screen.getByRole('button', { name: /Save defaults/i }));
 
     await waitFor(() => {
-      const putCall = calls.find(
-        (c) => c.url === '/api/settings' && c.method === 'PUT',
-      );
+      const putCall = calls.find((c) => c.url === '/api/settings' && c.method === 'PUT');
       expect(putCall).toBeDefined();
       expect(putCall?.body).toMatchObject({
         settings: {
@@ -208,11 +201,12 @@ describe('Workbench Sidebar and Settings UI', () => {
     await userEvent.click(screen.getByRole('button', { name: /Save hubs/i }));
 
     await waitFor(() => {
-      const hubPut = calls
-        .filter((c) => c.url === '/api/settings' && c.method === 'PUT')
-        .at(-1);
-      const savedHubs = (hubPut?.body as { settings: { facebookCityHubs: Array<{ slug: string; enabled: boolean }> } })
-        .settings.facebookCityHubs;
+      const hubPut = calls.filter((c) => c.url === '/api/settings' && c.method === 'PUT').at(-1);
+      const savedHubs = (
+        hubPut?.body as {
+          settings: { facebookCityHubs: Array<{ slug: string; enabled: boolean }> };
+        }
+      ).settings.facebookCityHubs;
       expect(savedHubs.find((h) => h.slug === 'seattle')?.enabled).toBe(false);
     });
 
@@ -242,9 +236,7 @@ describe('Workbench Sidebar and Settings UI', () => {
 
     await waitFor(() => {
       expect(
-        calls.some(
-          (c) => c.url === '/api/browser/poshmark/open-session' && c.method === 'POST',
-        ),
+        calls.some((c) => c.url === '/api/browser/poshmark/open-session' && c.method === 'POST'),
       ).toBe(true);
       expect(within(poshRow).getByText(/Active browser session/i)).toBeInTheDocument();
     });
@@ -258,18 +250,14 @@ describe('Workbench Sidebar and Settings UI', () => {
 
     await waitFor(() => {
       expect(
-        calls.some(
-          (c) => c.url === '/api/browser/facebook/reset-profile' && c.method === 'POST',
-        ),
+        calls.some((c) => c.url === '/api/browser/facebook/reset-profile' && c.method === 'POST'),
       ).toBe(true);
     });
 
     await userEvent.click(screen.getByRole('button', { name: /Stop server/i }));
 
     await waitFor(() => {
-      expect(
-        calls.some((c) => c.url === '/api/system/shutdown' && c.method === 'POST'),
-      ).toBe(true);
+      expect(calls.some((c) => c.url === '/api/system/shutdown' && c.method === 'POST')).toBe(true);
       expect(screen.getByRole('status')).toHaveTextContent(/Server stopped cleanly/i);
     });
   });
@@ -284,7 +272,9 @@ describe('Workbench Sidebar and Settings UI', () => {
     });
 
     const mercariCard = screen.getByTestId('retry-card-mercari');
-    const mercariToggle = within(mercariCard).getByLabelText(/Enable automatic retries for Mercari US/i);
+    const mercariToggle = within(mercariCard).getByLabelText(
+      /Enable automatic retries for Mercari US/i,
+    );
     const mercariCount = within(mercariCard).getByLabelText(/Mercari US retry count/i);
     const mercariWait = within(mercariCard).getByLabelText(/Mercari US retry wait seconds/i);
 
@@ -312,7 +302,10 @@ describe('Workbench Sidebar and Settings UI', () => {
       const saved = (
         putCall?.body as {
           settings: {
-            retrySettings: Record<string, { enabled: boolean; maxRetries: number; delaySeconds: number }>;
+            retrySettings: Record<
+              string,
+              { enabled: boolean; maxRetries: number; delaySeconds: number }
+            >;
           };
         }
       ).settings.retrySettings;

@@ -26,7 +26,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   try {
     parsed = new URL(rawUrl, 'http://127.0.0.1');
   } catch {
-    throw new Error(`[offline-guardrail] Unmocked fetch with invalid URL during npm test: ${rawUrl}`);
+    throw new Error(
+      `[offline-guardrail] Unmocked fetch with invalid URL during npm test: ${rawUrl}`,
+    );
   }
 
   if (!ALLOWED_LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase())) {

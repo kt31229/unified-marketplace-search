@@ -249,7 +249,10 @@ describe('createApp BrowserSessionManager + Poshmark integration', () => {
     expect(launches).toHaveLength(2);
     expect(launches[0]?.closed).toBe(true);
     expect(launches[1]?.closed).toBe(false);
-    expect(launches[1]?.options.args).toEqual(['--window-position=80,80', '--window-size=1280,900']);
+    expect(launches[1]?.options.args).toEqual([
+      '--window-position=80,80',
+      '--window-size=1280,900',
+    ]);
     expect(launches[1]?.gotoUrls).toEqual(['https://poshmark.com/search?query=patagonia']);
     expect(lifecycleEvents.indexOf('close:bg:0')).toBeLessThan(
       lifecycleEvents.indexOf('launch:fg:1'),

@@ -231,7 +231,9 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     for (const mp of MARKETPLACE_IDS) {
       const cfg = retrySettings[mp];
       if (!Number.isInteger(cfg.maxRetries) || cfg.maxRetries < 1 || cfg.maxRetries > 5) {
-        setErrorMessage(`${MARKETPLACE_LABELS[mp]} retry count must be a whole number from 1 to 5.`);
+        setErrorMessage(
+          `${MARKETPLACE_LABELS[mp]} retry count must be a whole number from 1 to 5.`,
+        );
         return;
       }
       if (!Number.isFinite(cfg.delaySeconds) || cfg.delaySeconds < 0 || cfg.delaySeconds > 60) {
@@ -342,11 +344,7 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
   };
 
   if (loading) {
-    return (
-      <div className="panel-box text-sm text-slate-600">
-        Loading local settings...
-      </div>
-    );
+    return <div className="panel-box text-sm text-slate-600">Loading local settings...</div>;
   }
 
   return (
@@ -540,9 +538,7 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
             </div>
 
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-slate-700">
-                Home Facebook City Slug (optional)
-              </span>
+              <span className="font-medium text-slate-700">Home Facebook City Slug (optional)</span>
               <input
                 type="text"
                 value={homeFacebookCitySlug}
@@ -678,8 +674,8 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
           <div>
             <h2 className="m-0 text-base font-semibold text-slate-900">Automatic Retries</h2>
             <p className="m-0 text-xs text-slate-600">
-              Retry failed initial searches, Load more requests, and queries to each Facebook City Hub
-              after a fixed wait before surfacing an error.
+              Retry failed initial searches, Load more requests, and queries to each Facebook City
+              Hub after a fixed wait before surfacing an error.
             </p>
           </div>
           <div className="flex items-center gap-2">

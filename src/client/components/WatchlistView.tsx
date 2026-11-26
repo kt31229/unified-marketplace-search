@@ -108,7 +108,8 @@ export function WatchlistView({ entries, loading, onRemove }: WatchlistViewProps
         <div>
           <h1 className="m-0 text-lg font-semibold text-slate-900">Watchlist</h1>
           <p className="m-0 text-xs text-slate-600 tabular">
-            {entries.length} saved {entries.length === 1 ? 'Watchlist Entry' : 'Watchlist Entries'} · PII-free snapshots
+            {entries.length} saved {entries.length === 1 ? 'Watchlist Entry' : 'Watchlist Entries'}{' '}
+            · PII-free snapshots
           </p>
         </div>
 

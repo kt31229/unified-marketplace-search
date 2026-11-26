@@ -44,7 +44,10 @@ describe('startServer lifecycle & 127.0.0.1 binding', () => {
     const dataDir = createTempDir('ums-srv-data-');
     const staticDir = createTempDir('ums-srv-static-');
     fs.mkdirSync(path.join(staticDir, 'assets'), { recursive: true });
-    fs.writeFileSync(path.join(staticDir, 'index.html'), '<!doctype html><html><body>UMS App</body></html>');
+    fs.writeFileSync(
+      path.join(staticDir, 'index.html'),
+      '<!doctype html><html><body>UMS App</body></html>',
+    );
     fs.writeFileSync(path.join(staticDir, 'assets', 'main.js'), 'console.log("ok");');
 
     const exitSpy = vi.fn();

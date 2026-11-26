@@ -9,11 +9,11 @@ import {
   type BrowserResponseHandle,
   type BrowserTransport,
 } from '../../src/server/browser-session-manager.ts';
-import { createPoshmarkAdapter, type PoshmarkNativeQuery } from '../../src/server/adapters/poshmark.ts';
 import {
-  createDefaultAppSettings,
-  createDefaultUnifiedFilter,
-} from '../../src/shared/index.ts';
+  createPoshmarkAdapter,
+  type PoshmarkNativeQuery,
+} from '../../src/server/adapters/poshmark.ts';
+import { createDefaultAppSettings, createDefaultUnifiedFilter } from '../../src/shared/index.ts';
 import type { AdapterExecutionContext as ServerAdapterContext } from '../../src/server/adapters/types.ts';
 
 function makeContext(overrides: Partial<ServerAdapterContext> = {}): ServerAdapterContext {
@@ -191,9 +191,9 @@ describe('PoshmarkAdapter', () => {
       makeContext(),
     );
     expect(new URL(maxOnly.nativeSearchUrl).searchParams.getAll('price[]')).toEqual(['-100']);
-    expect((maxOnly.nativeQuery as PoshmarkNativeQuery).vmRestRequest.filters.price_amount_range).toEqual([
-      { max: { val: '100', currency_code: 'USD' } },
-    ]);
+    expect(
+      (maxOnly.nativeQuery as PoshmarkNativeQuery).vmRestRequest.filters.price_amount_range,
+    ).toEqual([{ max: { val: '100', currency_code: 'USD' } }]);
 
     const minOnly = adapter.translateFilters(
       'jacket',
@@ -206,9 +206,9 @@ describe('PoshmarkAdapter', () => {
       makeContext(),
     );
     expect(new URL(minOnly.nativeSearchUrl).searchParams.getAll('price[]')).toEqual(['50-']);
-    expect((minOnly.nativeQuery as PoshmarkNativeQuery).vmRestRequest.filters.price_amount_range).toEqual([
-      { min: { val: '50', currency_code: 'USD' } },
-    ]);
+    expect(
+      (minOnly.nativeQuery as PoshmarkNativeQuery).vmRestRequest.filters.price_amount_range,
+    ).toEqual([{ min: { val: '50', currency_code: 'USD' } }]);
 
     // Broadened translation when 'poor' is selected (maps to 'uf', deduplicated with 'fair')
     const broadened = adapter.translateFilters(
@@ -374,7 +374,12 @@ describe('PoshmarkAdapter', () => {
       priceMax: 100,
       conditions: ['like_new', 'good'] as const,
     };
-    const translation = adapter.translateFilters('patagonia', { ...filters, conditions: [...filters.conditions] }, 'relevance', makeContext());
+    const translation = adapter.translateFilters(
+      'patagonia',
+      { ...filters, conditions: [...filters.conditions] },
+      'relevance',
+      makeContext(),
+    );
 
     const page1 = await adapter.executeInitial({
       keywords: 'patagonia',

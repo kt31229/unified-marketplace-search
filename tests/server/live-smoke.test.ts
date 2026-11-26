@@ -77,9 +77,9 @@ describe('parseLiveSmokeArgs & opt-in guard', () => {
   });
 
   it('rejects unknown Marketplace names, empty queries, invalid prices, or invalid conditions', () => {
-    expect(() =>
-      parseLiveSmokeArgs(['--yes', '--marketplaces=ebay,craigslist'], {}),
-    ).toThrow(/marketplace/i);
+    expect(() => parseLiveSmokeArgs(['--yes', '--marketplaces=ebay,craigslist'], {})).toThrow(
+      /marketplace/i,
+    );
     expect(() => parseLiveSmokeArgs(['--yes', '--query=   '], {})).toThrow(/query/i);
     expect(() => parseLiveSmokeArgs(['--yes', '--price-min=-5'], {})).toThrow(/price-min/i);
     expect(() => parseLiveSmokeArgs(['--yes', '--price-max=abc'], {})).toThrow(/price-max/i);
@@ -174,7 +174,12 @@ function makeSettings(): AppSettings {
   };
 }
 
-function makeListing(marketplace: MarketplaceId, id: string, title: string, price: number): Listing {
+function makeListing(
+  marketplace: MarketplaceId,
+  id: string,
+  title: string,
+  price: number,
+): Listing {
   return {
     marketplace,
     marketplaceListingId: id,
@@ -301,12 +306,7 @@ describe('runLiveSmoke paced orchestration', () => {
     expect(callOrder).toEqual(['ebay', 'poshmark', 'mercari', 'facebook']);
     expect(sleepCalls).toEqual([3500, 3500, 3500]);
     expect(result.exitCode).toBe(0);
-    expect(result.summary.results.map((r) => r.outcome)).toEqual([
-      'pass',
-      'pass',
-      'pass',
-      'pass',
-    ]);
+    expect(result.summary.results.map((r) => r.outcome)).toEqual(['pass', 'pass', 'pass', 'pass']);
     expect(result.report).not.toContain('ebay-client-secret-9876');
     expect(result.report).not.toContain('ebay-client-id-1234');
   });
