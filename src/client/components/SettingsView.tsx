@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
   BROWSER_MARKETPLACE_IDS,
+  FACEBOOK_COOLDOWN_PROFILES,
+  FACEBOOK_COOLDOWN_PROFILE_IDS,
   MARKETPLACE_IDS,
   MARKETPLACE_LABELS,
   createDefaultFacebookCityHubs,
@@ -8,6 +10,7 @@ import {
   type BrowserChannel,
   type BrowserMarketplaceId,
   type FacebookCityHub,
+  type FacebookCooldownProfile,
   type MarketplaceId,
   type MarketplaceRetrySettings,
   type SettingsResponse,
@@ -48,6 +51,8 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
   const [retrySettings, setRetrySettings] = useState<MarketplaceRetrySettings>(
     createDefaultMarketplaceRetrySettings,
   );
+  const [facebookCooldownProfile, setFacebookCooldownProfile] =
+    useState<FacebookCooldownProfile>('conservative');
 
   // Profile Reset <dialog> state
   const [resetTarget, setResetTarget] = useState<BrowserMarketplaceId | null>(null);
@@ -63,6 +68,7 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     setDefaultRadiusMiles(res.settings.defaultLocalPickupRadiusMiles);
     setHomeFacebookCitySlug(res.settings.homeFacebookCitySlug ?? '');
     setHubs(res.settings.facebookCityHubs.map((h) => ({ ...h })));
+    setFacebookCooldownProfile(res.settings.facebookCooldownProfile ?? 'conservative');
     setRetrySettings(res.settings.retrySettings ?? createDefaultMarketplaceRetrySettings());
   };
 
@@ -98,6 +104,30 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     };
   }, [fetchImpl]);
 
+  const putSettings = async (
+    body: Record<string, unknown>,
+    fallbackError: string,
+  ): Promise<SettingsResponse | null> => {
+    setStatusMessage(null);
+    setErrorMessage(null);
+    try {
+      const res = await fetchImpl('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+        setErrorMessage(errJson.error ?? fallbackError);
+        return null;
+      }
+      return (await res.json()) as SettingsResponse;
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : fallbackError);
+      return null;
+    }
+  };
+
   const handleSaveDefaults = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMessage(null);
@@ -109,34 +139,27 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
       return;
     }
 
-    const res = await fetchImpl('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const updated = await putSettings(
+      {
         settings: {
           browserChannel,
           homePostalCode: homePostalCode.trim() || null,
           defaultLocalPickupRadiusMiles: parsedRadius,
           homeFacebookCitySlug: homeFacebookCitySlug.trim() || null,
         },
-      }),
-    });
-
-    if (!res.ok) {
-      const errJson = (await res.json().catch(() => ({}))) as { error?: string };
-      setErrorMessage(errJson.error ?? 'Failed to save browser and location defaults.');
+      },
+      'Failed to save browser and location defaults.',
+    );
+    if (!updated) {
       return;
     }
 
-    const updated = (await res.json()) as SettingsResponse;
     syncFromResponse(updated);
     setStatusMessage('Saved browser and location defaults.');
   };
 
   const handleSaveEbay = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatusMessage(null);
-    setErrorMessage(null);
     setVerifyMessage(null);
 
     const payload: { clientId: string | null; clientSecret?: string } = {
@@ -146,19 +169,11 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
       payload.clientSecret = ebayClientSecret.trim();
     }
 
-    const res = await fetchImpl('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ebay: payload }),
-    });
-
-    if (!res.ok) {
-      const errJson = (await res.json().catch(() => ({}))) as { error?: string };
-      setErrorMessage(errJson.error ?? 'Failed to update eBay credentials.');
+    const updated = await putSettings({ ebay: payload }, 'Failed to update eBay credentials.');
+    if (!updated) {
       return;
     }
 
-    const updated = (await res.json()) as SettingsResponse;
     syncFromResponse(updated);
     setStatusMessage('Saved eBay credentials to secrets.json.');
   };
@@ -177,10 +192,29 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
     }
   };
 
-  const handleSaveHubs = async () => {
-    setStatusMessage(null);
-    setErrorMessage(null);
+  const handleChangeFacebookCooldownProfile = async (nextProfile: FacebookCooldownProfile) => {
+    const prevProfile = facebookCooldownProfile;
+    setFacebookCooldownProfile(nextProfile);
 
+    const updated = await putSettings(
+      {
+        settings: {
+          facebookCooldownProfile: nextProfile,
+        },
+      },
+      'Failed to save Facebook City Hub sweep speed profile.',
+    );
+    if (!updated) {
+      setFacebookCooldownProfile(prevProfile);
+      return;
+    }
+
+    setData(updated);
+    setFacebookCooldownProfile(updated.settings.facebookCooldownProfile ?? 'conservative');
+    setStatusMessage('Saved Facebook City Hub sweep speed profile.');
+  };
+
+  const handleSaveHubs = async () => {
     const sanitized = hubs
       .map((h) => ({
         slug: h.slug.trim(),
@@ -189,23 +223,18 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
       }))
       .filter((h) => h.slug.length > 0 && h.label.length > 0);
 
-    const res = await fetchImpl('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const updated = await putSettings(
+      {
         settings: {
           facebookCityHubs: sanitized,
         },
-      }),
-    });
-
-    if (!res.ok) {
-      const errJson = (await res.json().catch(() => ({}))) as { error?: string };
-      setErrorMessage(errJson.error ?? 'Failed to save Facebook City Hubs.');
+      },
+      'Failed to save Facebook City Hubs.',
+    );
+    if (!updated) {
       return;
     }
 
-    const updated = (await res.json()) as SettingsResponse;
     syncFromResponse(updated);
     setStatusMessage('Saved Facebook City Hubs.');
   };
@@ -242,23 +271,18 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
       }
     }
 
-    const res = await fetchImpl('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const updated = await putSettings(
+      {
         settings: {
           retrySettings,
         },
-      }),
-    });
-
-    if (!res.ok) {
-      const errJson = (await res.json().catch(() => ({}))) as { error?: string };
-      setErrorMessage(errJson.error ?? 'Failed to save automatic retry settings.');
+      },
+      'Failed to save automatic retry settings.',
+    );
+    if (!updated) {
       return;
     }
 
-    const updated = (await res.json()) as SettingsResponse;
     syncFromResponse(updated);
     setStatusMessage('Saved automatic retry settings.');
   };
@@ -784,7 +808,28 @@ export function SettingsView({ fetchImpl }: SettingsViewProps) {
                         : 'Not initialized yet'}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-end">
+                  {mp === 'facebook' && (
+                    <label className="flex flex-col gap-1 text-xs text-slate-700">
+                      <span className="font-medium">Hub sweep speed</span>
+                      <select
+                        aria-label="Facebook City Hub sweep speed"
+                        value={facebookCooldownProfile}
+                        onChange={(e) =>
+                          handleChangeFacebookCooldownProfile(
+                            e.target.value as FacebookCooldownProfile,
+                          )
+                        }
+                        className="w-fit rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                      >
+                        {FACEBOOK_COOLDOWN_PROFILE_IDS.map((profileId) => (
+                          <option key={profileId} value={profileId}>
+                            {FACEBOOK_COOLDOWN_PROFILES[profileId].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <button
                     type="button"
                     disabled={openingProfile === mp}

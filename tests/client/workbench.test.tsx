@@ -319,4 +319,119 @@ describe('Workbench Sidebar and Settings UI', () => {
     expect(mercariWait).toHaveValue(2);
     expect(ebayToggle).toBeChecked();
   });
+
+  it('renders the Facebook City Hub cooldown dropdown before Open browser session and saves on change', async () => {
+    const { fetchMock, calls } = createFetchMock(createMockSettingsResponse());
+    render(<App fetchImpl={fetchMock} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Settings$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Browser Sessions & Profiles/i)).toBeInTheDocument();
+    });
+
+    const fbRow = screen.getByTestId('profile-row-facebook');
+    const cooldownSelect = within(fbRow).getByLabelText(/Hub sweep speed/i);
+    const openBtn = within(fbRow).getByRole('button', { name: /Open browser session/i });
+
+    expect(cooldownSelect).toHaveValue('conservative');
+    expect(Array.from(cooldownSelect.querySelectorAll('option')).map((o) => o.textContent)).toEqual(
+      ['Conservative (3–5s)', 'Balanced (1.5–3s)', 'Fast (1–2.5s)'],
+    );
+    expect(
+      Boolean(cooldownSelect.compareDocumentPosition(openBtn) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+
+    // Other Marketplace cards should not render the Facebook cooldown dropdown
+    expect(
+      within(screen.getByTestId('profile-row-poshmark')).queryByLabelText(/Hub sweep speed/i),
+    ).toBeNull();
+
+    await userEvent.selectOptions(cooldownSelect, 'balanced');
+
+    await waitFor(() => {
+      const putCall = calls.filter((c) => c.url === '/api/settings' && c.method === 'PUT').at(-1);
+      expect(putCall?.body).toEqual({
+        settings: { facebookCooldownProfile: 'balanced' },
+      });
+      expect(cooldownSelect).toHaveValue('balanced');
+    });
+  });
+
+  it('reverts Facebook City Hub sweep speed on HTTP or network error and preserves unsaved edits on success', async () => {
+    const baseSettings = createMockSettingsResponse();
+    let mode: 'http-error' | 'network-error' | 'ok' = 'http-error';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      if (url === '/api/settings' && method === 'GET') {
+        return new Response(JSON.stringify(baseSettings), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/settings' && method === 'PUT') {
+        if (mode === 'http-error') {
+          return new Response(JSON.stringify({ error: 'Disk full' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (mode === 'network-error') {
+          throw new Error('Network down');
+        }
+        const body = JSON.parse(String(init?.body)) as {
+          settings: { facebookCooldownProfile: 'conservative' | 'balanced' | 'fast' };
+        };
+        return new Response(
+          JSON.stringify({
+            ...baseSettings,
+            settings: {
+              ...baseSettings.settings,
+              facebookCooldownProfile: body.settings.facebookCooldownProfile,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 404 });
+    });
+
+    render(<App fetchImpl={fetchMock} />);
+    await userEvent.click(screen.getByRole('button', { name: /^Settings$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Browser Sessions & Profiles/i)).toBeInTheDocument();
+    });
+
+    const fbRow = screen.getByTestId('profile-row-facebook');
+    const cooldownSelect = within(fbRow).getByLabelText(/Hub sweep speed/i);
+    expect(cooldownSelect).toHaveValue('conservative');
+
+    // (a1) HTTP 500 error reverts selection and surfaces error
+    await userEvent.selectOptions(cooldownSelect, 'fast');
+    await waitFor(() => {
+      expect(cooldownSelect).toHaveValue('conservative');
+      expect(screen.getByText('Disk full')).toBeInTheDocument();
+    });
+
+    // (a2) Network throw reverts selection and surfaces error without unhandled rejection
+    mode = 'network-error';
+    await userEvent.selectOptions(cooldownSelect, 'balanced');
+    await waitFor(() => {
+      expect(cooldownSelect).toHaveValue('conservative');
+      expect(screen.getByText('Network down')).toBeInTheDocument();
+    });
+
+    // (b) Preserves unsaved edits in another Settings field on success
+    mode = 'ok';
+    const zipInput = screen.getByLabelText(/Home ZIP \/ Postal Code/i);
+    await userEvent.clear(zipInput);
+    await userEvent.type(zipInput, '90210');
+
+    await userEvent.selectOptions(cooldownSelect, 'balanced');
+    await waitFor(() => {
+      expect(cooldownSelect).toHaveValue('balanced');
+      expect(screen.getByText(/Saved Facebook City Hub sweep speed profile/i)).toBeInTheDocument();
+    });
+    expect(zipInput).toHaveValue('90210');
+  });
 });
