@@ -108,7 +108,7 @@ export class SecretsStore {
 
     if (input.clear) {
       delete existingRoot.ebay;
-      fs.writeFileSync(this.filePath, JSON.stringify(existingRoot, null, 2) + '\n', {
+      fs.writeFileSync(this.filePath, `${JSON.stringify(existingRoot, null, 2)}\n`, {
         encoding: 'utf8',
         mode: 0o600,
       });
@@ -134,7 +134,7 @@ export class SecretsStore {
       },
     };
 
-    fs.writeFileSync(this.filePath, JSON.stringify(nextPayload, null, 2) + '\n', {
+    fs.writeFileSync(this.filePath, `${JSON.stringify(nextPayload, null, 2)}\n`, {
       encoding: 'utf8',
       mode: 0o600,
     });
