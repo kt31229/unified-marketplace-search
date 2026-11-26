@@ -154,7 +154,6 @@ function mapSortOrder(sortOrder: SortOrder): string | undefined {
       return 'price';
     case 'price_desc':
       return '-price';
-    case 'relevance':
     default:
       return undefined;
   }

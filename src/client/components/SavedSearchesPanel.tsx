@@ -9,7 +9,6 @@ function formatSortLabel(sortOrder: SortOrder): string {
       return 'Price ↑';
     case 'price_desc':
       return 'Price ↓';
-    case 'relevance':
     default:
       return 'Relevance';
   }
