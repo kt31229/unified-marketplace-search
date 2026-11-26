@@ -20,7 +20,6 @@ function formatShippingBadge(listing: Listing): { label: string; className: stri
       return { label: 'Buyer pays shipping', className: 'ship-badge ship-badge-neutral' };
     case 'local_pickup_only':
       return { label: 'Local pickup only', className: 'ship-badge ship-badge-pickup' };
-    case 'unknown':
     default:
       return { label: 'Shipping unknown', className: 'ship-badge ship-badge-neutral' };
   }
