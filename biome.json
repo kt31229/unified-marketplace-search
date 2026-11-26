@@ -3,8 +3,19 @@
 	"files": {
 		"includes": ["src/**", "tests/**", "scripts/**"]
 	},
-	"formatter": {
+	"assist": {
 		"enabled": false
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "space",
+		"lineWidth": 100,
+		"lineEnding": "auto"
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "single"
+		}
 	},
 	"linter": {
 		"enabled": true,
