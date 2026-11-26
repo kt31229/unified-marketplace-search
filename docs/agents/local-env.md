@@ -22,3 +22,5 @@ Non-obvious constraints for agents running in this Windows workspace.
 ## Subagent Reviews
 
 - Default read-only diff reviewers (such as `/code-review` subagents) to `Model: "flash"` to avoid `429 RESOURCE_EXHAUSTED` stalls when running parallel reviews.
+- Read-only review subagents can run `npm run lint`, `npm run typecheck`, and read-only `git`; leave `npm test` and `npm run build` to the parent agent (Vite/Vitest writes to `node_modules/.vite-temp/` and `dist/`, which fails with `EPERM` in the read-only sandbox).
+
