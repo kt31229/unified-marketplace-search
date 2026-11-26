@@ -23,9 +23,14 @@ describe('eBay Buy Browse API adapter — filter translation', () => {
       fulfillment: 'any' as const,
     };
 
-    const diag = adapter.translateFilters('  patagonia nano puff  ', { ...filters, conditions: [...filters.conditions] }, 'newest', {
-      settings,
-    });
+    const diag = adapter.translateFilters(
+      '  patagonia nano puff  ',
+      { ...filters, conditions: [...filters.conditions] },
+      'newest',
+      {
+        settings,
+      },
+    );
 
     expect(diag.marketplace).toBe('ebay');
     expect(diag.status).toBe('exact');
@@ -95,7 +100,9 @@ describe('eBay Buy Browse API adapter — filter translation', () => {
       { settings },
     );
     expect(good.status).toBe('broadened');
-    expect((good.nativeQuery as { filter: string }).filter).toContain('conditionIds:{2030|3000|5000}');
+    expect((good.nativeQuery as { filter: string }).filter).toContain(
+      'conditionIds:{2030|3000|5000}',
+    );
 
     // all three used tiers -> exact (all 3000 tiers covered)
     const allUsed = adapter.translateFilters(
@@ -273,10 +280,9 @@ describe('eBay Buy Browse API adapter — OAuth, execution, normalization, and p
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === 'https://api.ebay.com/identity/v1/oauth2/token') {
-        return new Response(
-          JSON.stringify({ access_token: 'tok-live', expires_in: 7200 }),
-          { status: 200 },
-        );
+        return new Response(JSON.stringify({ access_token: 'tok-live', expires_in: 7200 }), {
+          status: 200,
+        });
       }
       requestedUrls.push(url);
       const headers = init?.headers as Record<string, string>;
@@ -432,7 +438,9 @@ describe('eBay Buy Browse API adapter — OAuth, execution, normalization, and p
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === 'https://api.ebay.com/identity/v1/oauth2/token') {
-        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 });
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), {
+          status: 200,
+        });
       }
       return new Response(
         JSON.stringify({
@@ -465,7 +473,9 @@ describe('eBay Buy Browse API adapter — OAuth, execution, normalization, and p
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === 'https://api.ebay.com/identity/v1/oauth2/token') {
-        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 });
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), {
+          status: 200,
+        });
       }
       return await new Promise<Response>((_, reject) => {
         init?.signal?.addEventListener('abort', () => {

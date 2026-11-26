@@ -39,11 +39,7 @@ export function ListingGrid({
   newListingKeys,
 }: ListingGridProps) {
   if (listings.length === 0) {
-    return (
-      <div className="panel-box text-sm text-slate-600">
-        No matching Listings loaded yet.
-      </div>
-    );
+    return <div className="panel-box text-sm text-slate-600">No matching Listings loaded yet.</div>;
   }
 
   return (
@@ -56,10 +52,7 @@ export function ListingGrid({
         const isNew = newListingKeys?.has(key) ?? false;
 
         return (
-          <article
-            key={key}
-            className="listing-card"
-          >
+          <article key={key} className="listing-card">
             <a
               href={listing.url}
               target="_blank"
@@ -96,9 +89,7 @@ export function ListingGrid({
                   <button
                     type="button"
                     aria-pressed={isWatchlisted}
-                    aria-label={
-                      isWatchlisted ? 'Remove from Watchlist' : 'Save to Watchlist'
-                    }
+                    aria-label={isWatchlisted ? 'Remove from Watchlist' : 'Save to Watchlist'}
                     onClick={() => onToggleWatchlist(listing)}
                     className="watchlist-toggle-btn"
                   >

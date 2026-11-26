@@ -205,8 +205,7 @@ export function SearchView({
         if (window.scrollY > FORGIVING_SCROLL_ZONE_PX) {
           bufferLatchedRef.current = true;
         }
-        const shouldBuffer =
-          bufferLatchedRef.current || pendingBufferRef.current.length > 0;
+        const shouldBuffer = bufferLatchedRef.current || pendingBufferRef.current.length > 0;
         if (shouldBuffer) {
           const knownKeys = new Set([
             ...listingPagesRef.current.flat().map(listingKey),
@@ -251,10 +250,7 @@ export function SearchView({
     bufferLatchedRef.current = window.scrollY > FORGIVING_SCROLL_ZONE_PX;
   };
 
-  const runSearch = async (
-    refresh: boolean,
-    override?: Omit<TriggeredSearchRequest, 'seq'>,
-  ) => {
+  const runSearch = async (refresh: boolean, override?: Omit<TriggeredSearchRequest, 'seq'>) => {
     const params = override ?? {
       keywords,
       unifiedFilters,
@@ -349,10 +345,7 @@ export function SearchView({
           if (loadMorePageIndex === null) {
             loadMorePageIndex = listingPagesRef.current.length;
           }
-          if (
-            marketplace &&
-            (data as ListingsBatchEvent).marketplace === marketplace
-          ) {
+          if (marketplace && (data as ListingsBatchEvent).marketplace === marketplace) {
             receivedBatchForTarget = true;
           }
         }
@@ -539,7 +532,11 @@ export function SearchView({
           </button>
         </form>
 
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Target Marketplaces">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Target Marketplaces"
+        >
           <span className="text-xs font-semibold text-slate-600">Marketplaces:</span>
           {MARKETPLACE_IDS.map((mp) => {
             const active = enabledMarketplaces.includes(mp);
@@ -637,8 +634,7 @@ export function SearchView({
 
           <footer className="panel-box flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-slate-600 tabular">
-              Showing {sortedListings.length}{' '}
-              {sortedListings.length === 1 ? 'Listing' : 'Listings'}
+              Showing {sortedListings.length} {sortedListings.length === 1 ? 'Listing' : 'Listings'}
             </span>
             <button
               type="button"

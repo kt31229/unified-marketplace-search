@@ -159,9 +159,10 @@ function mapSortOrder(sortOrder: SortOrder): string | undefined {
   }
 }
 
-function parseShipping(
-  item: z.infer<typeof EbayItemSummarySchema>,
-): { shippingPrice: number | null; shippingType: ShippingType } {
+function parseShipping(item: z.infer<typeof EbayItemSummarySchema>): {
+  shippingPrice: number | null;
+  shippingType: ShippingType;
+} {
   const firstOption = item.shippingOptions?.[0];
   if (firstOption) {
     if (firstOption.shippingCostType === 'FIXED') {
@@ -183,10 +184,7 @@ function parseShipping(
   return { shippingPrice: null, shippingType: 'buyer_paid_unknown' };
 }
 
-function normalizeEbayItem(
-  rawNode: unknown,
-  adapterRank: number,
-): Listing | null {
+function normalizeEbayItem(rawNode: unknown, adapterRank: number): Listing | null {
   const parsed = EbayItemSummarySchema.safeParse(rawNode);
   if (!parsed.success) {
     return null;
@@ -317,11 +315,7 @@ export class EbayAdapter implements MarketplaceAdapter {
       const minStr = unifiedFilters.priceMin != null ? unifiedFilters.priceMin.toFixed(2) : '';
       const maxStr = unifiedFilters.priceMax != null ? unifiedFilters.priceMax.toFixed(2) : '';
       const rangeExpr =
-        minStr && maxStr
-          ? `[${minStr}..${maxStr}]`
-          : minStr
-            ? `[${minStr}..]`
-            : `[..${maxStr}]`;
+        minStr && maxStr ? `[${minStr}..${maxStr}]` : minStr ? `[${minStr}..]` : `[..${maxStr}]`;
       filterClauses.push(`price:${rangeExpr},priceCurrency:USD`);
     }
 
@@ -362,7 +356,9 @@ export class EbayAdapter implements MarketplaceAdapter {
         };
       }
       const radius =
-        unifiedFilters.localPickupRadiusMiles ?? context.settings.defaultLocalPickupRadiusMiles ?? 50;
+        unifiedFilters.localPickupRadiusMiles ??
+        context.settings.defaultLocalPickupRadiusMiles ??
+        50;
       filterClauses.push(
         `deliveryOptions:{SELLER_ARRANGED_LOCAL_PICKUP},pickupCountry:US,pickupPostalCode:${zip},pickupRadius:${radius},pickupRadiusUnit:mi`,
       );
@@ -444,9 +440,7 @@ export class EbayAdapter implements MarketplaceAdapter {
     }
   }
 
-  async verifyCredentials(
-    creds: RawEbayCredentials,
-  ): Promise<{ valid: boolean; error?: string }> {
+  async verifyCredentials(creds: RawEbayCredentials): Promise<{ valid: boolean; error?: string }> {
     if (!creds.configured) {
       return {
         valid: false,
@@ -512,9 +506,12 @@ export class EbayAdapter implements MarketplaceAdapter {
         });
       } catch (err) {
         if (timeoutGuard.didTimeout()) {
-          throw Object.assign(new Error(`eBay Buy Browse API timed out after ${this.timeoutMs}ms`), {
-            isTimeout: true,
-          });
+          throw Object.assign(
+            new Error(`eBay Buy Browse API timed out after ${this.timeoutMs}ms`),
+            {
+              isTimeout: true,
+            },
+          );
         }
         throw err;
       } finally {

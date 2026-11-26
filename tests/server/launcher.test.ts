@@ -78,11 +78,9 @@ describe('launchApp', () => {
     });
     expect(probePortOpen).toHaveBeenCalledWith('127.0.0.1', 4999);
     expect(spawnServer).toHaveBeenCalledTimes(1);
-    expect(spawnServer).toHaveBeenCalledWith(
-      'C:/repo/dist/server/index.js',
-      { UMS_PORT: '4999' },
-      ['--no-open'],
-    );
+    expect(spawnServer).toHaveBeenCalledWith('C:/repo/dist/server/index.js', { UMS_PORT: '4999' }, [
+      '--no-open',
+    ]);
     expect(unrefSpy).toHaveBeenCalledTimes(1);
     expect(openUrl).toHaveBeenCalledTimes(1);
     expect(openUrl).toHaveBeenCalledWith('http://127.0.0.1:4999');
@@ -294,7 +292,9 @@ describe('runServerEntrypoint (npm start)', () => {
 describe('defaultOpenUrl', () => {
   it('spawns chrome.exe directly on win32 when installed', async () => {
     const unref = vi.fn();
-    const spawnImpl = vi.fn(() => ({ unref })) as unknown as Parameters<typeof defaultOpenUrl>[2] extends {
+    const spawnImpl = vi.fn(() => ({ unref })) as unknown as Parameters<
+      typeof defaultOpenUrl
+    >[2] extends {
       spawnImpl?: infer S;
     }
       ? S

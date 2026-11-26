@@ -104,15 +104,11 @@ function createScriptedMercariTransport(script: MercariMockScript) {
   const transport: BrowserTransport = {
     async launchPersistentContext(): Promise<BrowserContextHandle> {
       launchCount += 1;
-      let pendingWaiter:
-        | {
-            predicate:
-              | string
-              | ((res: BrowserResponseHandle) => boolean | Promise<boolean>);
-            resolve: (res: BrowserResponseHandle) => void;
-            reject: (err: Error) => void;
-          }
-        | null = null;
+      let pendingWaiter: {
+        predicate: string | ((res: BrowserResponseHandle) => boolean | Promise<boolean>);
+        resolve: (res: BrowserResponseHandle) => void;
+        reject: (err: Error) => void;
+      } | null = null;
 
       const deliverResponse = async (res: BrowserResponseHandle) => {
         emitResponse(res);
@@ -176,7 +172,9 @@ function createScriptedMercariTransport(script: MercariMockScript) {
               if (pendingWaiter?.resolve === wrappedResolve) {
                 pendingWaiter = null;
               }
-              reject(Object.assign(new Error('waitForResponse timed out'), { name: 'TimeoutError' }));
+              reject(
+                Object.assign(new Error('waitForResponse timed out'), { name: 'TimeoutError' }),
+              );
             }, timeoutMs);
             const wrappedResolve = (res: BrowserResponseHandle) => {
               clearTimeout(timer);
@@ -475,7 +473,9 @@ describe('MercariAdapter', () => {
     expect('seller' in (page1.listings[0] as Record<string, unknown>)).toBe(false);
 
     expect(page1.listings[1]?.price).toBe(25);
-    expect(page1.listings[1]?.thumbnailUrl).toBe('https://u-mercari-images.mercdn.net/photos/m1002.jpg');
+    expect(page1.listings[1]?.thumbnailUrl).toBe(
+      'https://u-mercari-images.mercdn.net/photos/m1002.jpg',
+    );
 
     const cursor = page1.nextCursor as MercariCursor;
     expect(cursor.nextKey).toBe('cursor-page-2');
@@ -723,14 +723,10 @@ describe('MercariAdapter', () => {
         const rec = { isBackground, gotoUrls: [] as string[] };
         launches.push(rec);
         let currentUrl = 'about:blank';
-        let pendingWaiter:
-          | {
-              predicate:
-                | string
-                | ((res: BrowserResponseHandle) => boolean | Promise<boolean>);
-              resolve: (res: BrowserResponseHandle) => void;
-            }
-          | null = null;
+        let pendingWaiter: {
+          predicate: string | ((res: BrowserResponseHandle) => boolean | Promise<boolean>);
+          resolve: (res: BrowserResponseHandle) => void;
+        } | null = null;
         const closeListeners: Array<() => void> = [];
 
         const emit = async (url: string, status: number, body: unknown) => {
@@ -765,34 +761,30 @@ describe('MercariAdapter', () => {
             }
             if (isBackground && phase === 'recovered') {
               queueMicrotask(() => {
-                void emit(
-                  'https://www.mercari.com/v1/api?operationName=searchFacetQuery',
-                  200,
-                  {
-                    data: {
-                      search: {
-                        nextKey: 'page-2-key',
-                        searchId: 's-1',
-                        initRequestTime: 1763800000,
-                        offset: 100,
-                        itemsList: [
-                          {
-                            id: 'm-rec-1',
-                            name: 'Leica M6 Body',
-                            price: 250000,
-                            status: 'on_sale',
-                            created: 1763790000,
-                            shippingPayer: null,
-                            shippingClass: null,
-                            photos: [
-                              { thumbnail: 'https://u-mercari-images.mercdn.net/photos/m-rec-1.jpg' },
-                            ],
-                          },
-                        ],
-                      },
+                void emit('https://www.mercari.com/v1/api?operationName=searchFacetQuery', 200, {
+                  data: {
+                    search: {
+                      nextKey: 'page-2-key',
+                      searchId: 's-1',
+                      initRequestTime: 1763800000,
+                      offset: 100,
+                      itemsList: [
+                        {
+                          id: 'm-rec-1',
+                          name: 'Leica M6 Body',
+                          price: 250000,
+                          status: 'on_sale',
+                          created: 1763790000,
+                          shippingPayer: null,
+                          shippingClass: null,
+                          photos: [
+                            { thumbnail: 'https://u-mercari-images.mercdn.net/photos/m-rec-1.jpg' },
+                          ],
+                        },
+                      ],
                     },
                   },
-                );
+                });
               });
             }
             return {
@@ -806,31 +798,27 @@ describe('MercariAdapter', () => {
           content: async () => '<html><body></body></html>',
           async evaluate<R>(): Promise<R> {
             queueMicrotask(() => {
-              void emit(
-                'https://www.mercari.com/v1/api?operationName=searchFacetQuery',
-                200,
-                {
-                  data: {
-                    search: {
-                      nextKey: '0',
-                      searchId: 's-1',
-                      initRequestTime: 1763800000,
-                      offset: 200,
-                      itemsList: [
-                        {
-                          id: 'm-rec-2',
-                          name: 'Leica Summicron 35mm',
-                          price: 180000,
-                          status: 'on_sale',
-                          created: 1763780000,
-                          shippingPayer: null,
-                          shippingClass: null,
-                        },
-                      ],
-                    },
+              void emit('https://www.mercari.com/v1/api?operationName=searchFacetQuery', 200, {
+                data: {
+                  search: {
+                    nextKey: '0',
+                    searchId: 's-1',
+                    initRequestTime: 1763800000,
+                    offset: 200,
+                    itemsList: [
+                      {
+                        id: 'm-rec-2',
+                        name: 'Leica Summicron 35mm',
+                        price: 180000,
+                        status: 'on_sale',
+                        created: 1763780000,
+                        shippingPayer: null,
+                        shippingClass: null,
+                      },
+                    ],
                   },
                 },
-              );
+              });
             });
             return undefined as R;
           },

@@ -94,9 +94,7 @@ function isSavedSearchDirty(
 
 export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
   const [activeView, setActiveView] = useState<WorkbenchView>(initialView);
-  const [availableHubs, setAvailableHubs] = useState<FacebookCityHub[]>(
-    DEFAULT_FACEBOOK_CITY_HUBS,
-  );
+  const [availableHubs, setAvailableHubs] = useState<FacebookCityHub[]>(DEFAULT_FACEBOOK_CITY_HUBS);
   const [defaultFilterBaseline, setDefaultFilterBaseline] = useState<UnifiedFilter>(() =>
     createDefaultUnifiedFilter(),
   );
@@ -191,7 +189,9 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
 
   const watchlistedKeys = useMemo(
     () =>
-      new Set(watchlistEntries.map((entry) => `${entry.marketplace}:${entry.marketplaceListingId}`)),
+      new Set(
+        watchlistEntries.map((entry) => `${entry.marketplace}:${entry.marketplaceListingId}`),
+      ),
     [watchlistEntries],
   );
 
@@ -290,7 +290,7 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
   const activeSavedSearch = useMemo(
     () =>
       activeSavedSearchId != null
-        ? savedSearches.find((item) => item.id === activeSavedSearchId) ?? null
+        ? (savedSearches.find((item) => item.id === activeSavedSearchId) ?? null)
         : null,
     [activeSavedSearchId, savedSearches],
   );
@@ -437,9 +437,7 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
       return false;
     }
     const json = (await response.json()) as { savedSearch: SavedSearch };
-    setSavedSearches((prev) =>
-      prev.map((entry) => (entry.id === id ? json.savedSearch : entry)),
-    );
+    setSavedSearches((prev) => prev.map((entry) => (entry.id === id ? json.savedSearch : entry)));
     return true;
   };
 
@@ -594,11 +592,7 @@ export function App({ fetchImpl = fetch, initialView = 'search' }: AppProps) {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <UndoToast
-        entry={undoEntry}
-        onUndo={handleUndoRemove}
-        onDismiss={() => setUndoEntry(null)}
-      />
+      <UndoToast entry={undoEntry} onUndo={handleUndoRemove} onDismiss={() => setUndoEntry(null)} />
     </div>
   );
 }

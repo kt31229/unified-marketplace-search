@@ -227,7 +227,10 @@ describe('BrowserSessionManager', () => {
     expect(fake.launches[0]?.closed).toBe(true);
     expect(fake.launches[1]?.closed).toBe(false);
     expect(fake.launches[1]?.options.headless).toBe(false);
-    expect(fake.launches[1]?.options.args).toEqual(['--window-position=80,80', '--window-size=1280,900']);
+    expect(fake.launches[1]?.options.args).toEqual([
+      '--window-position=80,80',
+      '--window-size=1280,900',
+    ]);
     expect(fake.launches[1]?.pages[0]?.navigatedUrls).toEqual(['https://poshmark.com/']);
 
     const closeIdx = fake.events.indexOf('close:poshmark');
@@ -283,9 +286,11 @@ describe('BrowserSessionManager', () => {
     await backgroundStarted;
 
     let foregroundDone = false;
-    const fgPromise = manager.openForegroundSession('mercari', 'https://www.mercari.com/search/?keyword=sony').then(() => {
-      foregroundDone = true;
-    });
+    const fgPromise = manager
+      .openForegroundSession('mercari', 'https://www.mercari.com/search/?keyword=sony')
+      .then(() => {
+        foregroundDone = true;
+      });
 
     await Promise.resolve();
     expect(foregroundDone).toBe(false);
@@ -399,6 +404,8 @@ describe('BrowserSessionManager', () => {
     expect(detectInstalledChromiumMajorVersion('chrome', 'win32', env)).toBe(158);
     expect(detectInstalledChromiumMajorVersion('msedge', 'win32', env)).toBe(140);
     expect(detectInstalledChromiumMajorVersion('chrome', 'linux', env)).toBeNull();
-    expect(detectInstalledChromiumMajorVersion('chrome', 'win32', {} as NodeJS.ProcessEnv)).toBeNull();
+    expect(
+      detectInstalledChromiumMajorVersion('chrome', 'win32', {} as NodeJS.ProcessEnv),
+    ).toBeNull();
   });
 });

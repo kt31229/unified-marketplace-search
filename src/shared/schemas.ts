@@ -90,9 +90,7 @@ export const UnifiedFilterSchema = z
   })
   .refine(
     (filter) =>
-      filter.priceMin == null ||
-      filter.priceMax == null ||
-      filter.priceMin <= filter.priceMax,
+      filter.priceMin == null || filter.priceMax == null || filter.priceMin <= filter.priceMax,
     {
       message: 'Minimum price must be less than or equal to maximum price',
       path: ['priceMax'],
@@ -178,10 +176,7 @@ export const UpdateSavedSearchInputSchema = z
     name: z.string().trim().min(1, 'Saved Search name is required').optional(),
     keywords: z.string().trim().min(1, 'Enter search keywords').optional(),
     unifiedFilters: UnifiedFilterSchema.optional(),
-    marketplaces: z
-      .array(MarketplaceIdSchema)
-      .min(1, 'Select at least one Marketplace')
-      .optional(),
+    marketplaces: z.array(MarketplaceIdSchema).min(1, 'Select at least one Marketplace').optional(),
     sortOrder: SortOrderSchema.optional(),
   })
   .refine(
@@ -196,10 +191,7 @@ export const UpdateSavedSearchInputSchema = z
 
 export type UpdateSavedSearchInput = z.infer<typeof UpdateSavedSearchInputSchema>;
 
-export function suggestSavedSearchName(
-  keywords: string,
-  unifiedFilters?: UnifiedFilter,
-): string {
+export function suggestSavedSearchName(keywords: string, unifiedFilters?: UnifiedFilter): string {
   const base = keywords.trim() || 'Saved Search';
   if (!unifiedFilters) {
     return base;
@@ -409,7 +401,12 @@ export type SearchSseEvent =
   | { event: 'listings_batch'; data: ListingsBatchEvent }
   | { event: 'run_complete'; data: RunCompleteEvent };
 
-export function createDefaultUnifiedFilter(settings?: Pick<AppSettings, 'facebookCityHubs' | 'facebookRadiusMiles' | 'homePostalCode' | 'defaultLocalPickupRadiusMiles'>): UnifiedFilter {
+export function createDefaultUnifiedFilter(
+  settings?: Pick<
+    AppSettings,
+    'facebookCityHubs' | 'facebookRadiusMiles' | 'homePostalCode' | 'defaultLocalPickupRadiusMiles'
+  >,
+): UnifiedFilter {
   const hubs = settings?.facebookCityHubs ?? DEFAULT_FACEBOOK_CITY_HUBS;
   return {
     priceMin: null,

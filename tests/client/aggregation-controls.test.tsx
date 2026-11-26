@@ -208,7 +208,9 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
             data: {
               searchRunId: 'run-scroll-1',
               marketplace: 'ebay',
-              listings: [makeListing('ebay', 'e-more', { title: 'Loaded More eBay Vest', adapterRank: 3 })],
+              listings: [
+                makeListing('ebay', 'e-more', { title: 'Loaded More eBay Vest', adapterRank: 3 }),
+              ],
               hasMore: false,
             },
           },
@@ -265,7 +267,9 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /\+2 new Listings — Click to merge/i })).toBeVisible();
+      expect(
+        screen.getByRole('button', { name: /\+2 new Listings — Click to merge/i }),
+      ).toBeVisible();
     });
     expect(screen.queryByText('Buffered Poshmark Parka')).not.toBeInTheDocument();
 
@@ -273,11 +277,15 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
     act(() => {
       setScrollY(0);
     });
-    expect(screen.getByRole('button', { name: /\+2 new Listings — Click to merge/i })).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: /\+2 new Listings — Click to merge/i }),
+    ).toBeVisible();
     expect(screen.queryByText('Buffered Poshmark Parka')).not.toBeInTheDocument();
 
     // Click merge pill -> cards appear with persistent gold "New" badges
-    await userEvent.click(screen.getByRole('button', { name: /\+2 new Listings — Click to merge/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /\+2 new Listings — Click to merge/i }),
+    );
     await waitFor(() => {
       expect(screen.getByText('Buffered Poshmark Parka')).toBeInTheDocument();
       expect(screen.getByText('Buffered Poshmark Fleece')).toBeInTheDocument();
@@ -313,7 +321,9 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
-      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+      const body = init?.body
+        ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+        : undefined;
       calls.push({ url, method, body });
 
       if (url === '/api/settings') {
@@ -760,7 +770,9 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
             data: {
               searchRunId: 'run-per-mp-1',
               marketplace: 'ebay',
-              listings: [makeListing('ebay', 'e-p2', { title: 'eBay Page 2 Parka', adapterRank: 2 })],
+              listings: [
+                makeListing('ebay', 'e-p2', { title: 'eBay Page 2 Parka', adapterRank: 2 }),
+              ],
               hasMore: false,
             },
           },
@@ -1132,7 +1144,11 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
               marketplace: 'ebay',
               listings: [
                 makeListing('ebay', `${runId}-1`, { title: '$50 Coat', price: 50, adapterRank: 1 }),
-                makeListing('ebay', `${runId}-2`, { title: '$100 Parka', price: 100, adapterRank: 2 }),
+                makeListing('ebay', `${runId}-2`, {
+                  title: '$100 Parka',
+                  price: 100,
+                  adapterRank: 2,
+                }),
               ],
               hasMore: true,
             },
@@ -1148,7 +1164,10 @@ describe('Scroll-safe merge pill, gold New badges, and post-run controls', () =>
           },
         ]);
       }
-      if (url === '/api/searches/run-price-1/load-more' || url === '/api/searches/run-price-2/load-more') {
+      if (
+        url === '/api/searches/run-price-1/load-more' ||
+        url === '/api/searches/run-price-2/load-more'
+      ) {
         const runId = url.includes('run-price-1') ? 'run-price-1' : 'run-price-2';
         return createSseResponse([
           {

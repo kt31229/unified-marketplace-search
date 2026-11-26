@@ -72,7 +72,7 @@ export function SavedSearchesPanel({
 
   const activeSavedSearch =
     activeSavedSearchId != null
-      ? savedSearches.find((item) => item.id === activeSavedSearchId) ?? null
+      ? (savedSearches.find((item) => item.id === activeSavedSearchId) ?? null)
       : null;
 
   const startRename = (item: SavedSearch) => {
@@ -124,7 +124,8 @@ export function SavedSearchesPanel({
       {activeSavedSearch && isDirty && (
         <div className="saved-dirty-banner" role="status" data-testid="saved-search-dirty-banner">
           <span>
-            Modified <strong>{activeSavedSearch.name}</strong> — changes are not saved automatically.
+            Modified <strong>{activeSavedSearch.name}</strong> — changes are not saved
+            automatically.
           </span>
           <div className="flex flex-wrap gap-1.5">
             <button

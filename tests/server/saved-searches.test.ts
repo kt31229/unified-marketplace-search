@@ -157,7 +157,11 @@ describe('Saved Searches SQLite persistence and HTTP API', () => {
         }),
       });
       expect(res.status).toBe(201);
-      return (await res.json()).savedSearch as { id: string; name: string; lastRunAt: string | null };
+      return (await res.json()).savedSearch as {
+        id: string;
+        name: string;
+        lastRunAt: string | null;
+      };
     };
 
     const first = await createOne('First', 'jacket');

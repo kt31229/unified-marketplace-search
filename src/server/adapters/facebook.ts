@@ -221,7 +221,9 @@ export function buildFacebookSearchUrl(
   sortOrder: SortOrder,
   conditionCodes?: string[],
 ): string {
-  const url = new URL(`https://www.facebook.com/marketplace/${encodeURIComponent(hubSlug)}/search/`);
+  const url = new URL(
+    `https://www.facebook.com/marketplace/${encodeURIComponent(hubSlug)}/search/`,
+  );
   url.searchParams.set('query', keywords.trim());
 
   if (unifiedFilters.priceMin != null) {
@@ -377,8 +379,7 @@ function extractRelayFeedFromHtml(html: string): {
   hasAuthError: boolean;
   upstreamError: string | null;
 } {
-  const scriptRegex =
-    /<script\b[^>]*\btype=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptRegex = /<script\b[^>]*\btype=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
   let hasAuthError = false;
   let upstreamError: string | null = null;
@@ -842,13 +843,17 @@ export class FacebookAdapter implements MarketplaceAdapter {
         return {
           ok: false,
           runStatus: 'timeout',
-          errorMessage: err instanceof Error ? err.message : `Facebook Marketplace timed out for ${hub.label}.`,
+          errorMessage:
+            err instanceof Error ? err.message : `Facebook Marketplace timed out for ${hub.label}.`,
         };
       }
       return {
         ok: false,
         runStatus: 'network_error',
-        errorMessage: err instanceof Error ? err.message : `Facebook Marketplace browser error for ${hub.label}.`,
+        errorMessage:
+          err instanceof Error
+            ? err.message
+            : `Facebook Marketplace browser error for ${hub.label}.`,
       };
     }
   }
@@ -1301,14 +1306,18 @@ export class FacebookAdapter implements MarketplaceAdapter {
           ok: false,
           runStatus: 'timeout',
           errorMessage:
-            err instanceof Error ? err.message : `Facebook Marketplace load-more timed out for ${hub.label}.`,
+            err instanceof Error
+              ? err.message
+              : `Facebook Marketplace load-more timed out for ${hub.label}.`,
         };
       }
       return {
         ok: false,
         runStatus: 'network_error',
         errorMessage:
-          err instanceof Error ? err.message : `Facebook Marketplace load-more failed for ${hub.label}.`,
+          err instanceof Error
+            ? err.message
+            : `Facebook Marketplace load-more failed for ${hub.label}.`,
       };
     }
   }

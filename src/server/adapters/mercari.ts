@@ -556,11 +556,9 @@ export class MercariAdapter implements MarketplaceAdapter {
 
     try {
       return await createTimeoutRace(
-        this.browserSessionManager.runInBackgroundPage(
-          'mercari',
-          (page) => fn(page, remainingMs),
-          { signal: context.signal },
-        ),
+        this.browserSessionManager.runInBackgroundPage('mercari', (page) => fn(page, remainingMs), {
+          signal: context.signal,
+        }),
         this.timeoutMs,
         context.signal,
         'Mercari',

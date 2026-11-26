@@ -193,9 +193,10 @@ function buildVmRestEndpointUrl(requestPayload: PoshmarkVmRestRequest): string {
   return `/vm-rest/posts?${params.toString()}`;
 }
 
-function mapPoshmarkShipping(
-  discountType: string | null | undefined,
-): { shippingPrice: number | null; shippingType: ShippingType } {
+function mapPoshmarkShipping(discountType: string | null | undefined): {
+  shippingPrice: number | null;
+  shippingType: ShippingType;
+} {
   if (discountType === 'free') {
     return { shippingPrice: 0, shippingType: 'free' };
   }
@@ -366,15 +367,17 @@ async function tryInPageSortFallback(
   }
 
   const sortCode = POSHMARK_SORT_MAP[sortOrder];
-  const responsePromise = page.waitForResponse(
-    (res) => res.url().includes('/vm-rest/posts'),
-    { timeout: Math.min(timeoutMs, 5_000) },
-  );
+  const responsePromise = page.waitForResponse((res) => res.url().includes('/vm-rest/posts'), {
+    timeout: Math.min(timeoutMs, 5_000),
+  });
 
   try {
-    await page.click(`[data-test="sort-by"], [data-et-name="sort_by"], [data-value="${sortCode}"]`, {
-      timeout: Math.min(timeoutMs, 2_500),
-    });
+    await page.click(
+      `[data-test="sort-by"], [data-et-name="sort_by"], [data-value="${sortCode}"]`,
+      {
+        timeout: Math.min(timeoutMs, 2_500),
+      },
+    );
     const res = await responsePromise;
     const status = res.status();
     if (status === 403 || status === 401) {
@@ -593,7 +596,11 @@ export class PoshmarkAdapter implements MarketplaceAdapter {
             const endpointUrl = buildVmRestEndpointUrl(requestPayload);
             const fetchResult = await runInPageVmRestFetch(page, endpointUrl, remainingMs());
 
-            if (fetchResult.isChallengeDom || fetchResult.status === 403 || fetchResult.status === 401) {
+            if (
+              fetchResult.isChallengeDom ||
+              fetchResult.status === 403 ||
+              fetchResult.status === 401
+            ) {
               return {
                 runStatus: 'challenge_or_auth_required',
                 listings: [],

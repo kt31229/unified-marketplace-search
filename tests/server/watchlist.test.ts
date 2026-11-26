@@ -198,7 +198,14 @@ describe('Watchlist SQLite migration, PII-free persistence, and HTTP endpoints',
     // Default sort: newest saved first
     const listDefault = await instance.app.request('/api/watchlist');
     expect(listDefault.status).toBe(200);
-    const defaultJson = (await listDefault.json()) as { entries: Array<{ marketplaceListingId: string; title: string; price: number | null; url: string }> };
+    const defaultJson = (await listDefault.json()) as {
+      entries: Array<{
+        marketplaceListingId: string;
+        title: string;
+        price: number | null;
+        url: string;
+      }>;
+    };
     expect(defaultJson.entries.map((e) => e.marketplaceListingId)).toEqual(['e-1', 'm-1', 'p-1']);
     expect(defaultJson.entries[0]?.title).toBe('Updated Fresh Title');
     expect(defaultJson.entries[0]?.price).toBe(72);
@@ -211,12 +218,16 @@ describe('Watchlist SQLite migration, PII-free persistence, and HTTP endpoints',
 
     // Sort price_desc: null price STILL at bottom
     const listDesc = await instance.app.request('/api/watchlist?sort=price_desc');
-    const descJson = (await listDesc.json()) as { entries: Array<{ marketplaceListingId: string }> };
+    const descJson = (await listDesc.json()) as {
+      entries: Array<{ marketplaceListingId: string }>;
+    };
     expect(descJson.entries.map((e) => e.marketplaceListingId)).toEqual(['e-1', 'm-1', 'p-1']);
 
     // Filter by marketplace
     const filtered = await instance.app.request('/api/watchlist?marketplace=poshmark');
-    const filteredJson = (await filtered.json()) as { entries: Array<{ marketplaceListingId: string }> };
+    const filteredJson = (await filtered.json()) as {
+      entries: Array<{ marketplaceListingId: string }>;
+    };
     expect(filteredJson.entries.map((e) => e.marketplaceListingId)).toEqual(['p-1']);
   });
 
@@ -346,7 +357,9 @@ describe('Watchlist SQLite migration, PII-free persistence, and HTTP endpoints',
     };
     expect(listJson.entries).toHaveLength(1);
     expect(listJson.entries[0]?.cachedThumbnailPath).toBeNull();
-    expect(listJson.entries[0]?.thumbnailUrl).toBe('https://di2ponv0v5otw.cloudfront.net/pm-404.jpg');
+    expect(listJson.entries[0]?.thumbnailUrl).toBe(
+      'https://di2ponv0v5otw.cloudfront.net/pm-404.jpg',
+    );
   });
 
   it('cancels in-flight thumbnail caching when entry is deleted before download finishes so no orphaned file remains', async () => {

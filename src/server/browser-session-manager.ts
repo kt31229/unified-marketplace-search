@@ -254,7 +254,10 @@ export class BrowserSessionManager {
       release = resolve;
     });
     const prev = slot.lockChain;
-    slot.lockChain = prev.then(() => next, () => next);
+    slot.lockChain = prev.then(
+      () => next,
+      () => next,
+    );
 
     await prev;
     try {
@@ -273,7 +276,12 @@ export class BrowserSessionManager {
 
   private scheduleIdleTimer(slot: ProfileSlot): void {
     this.clearIdleTimer(slot);
-    if (this.shuttingDown || this.idleTimeoutMs <= 0 || slot.mode !== 'background' || !slot.context) {
+    if (
+      this.shuttingDown ||
+      this.idleTimeoutMs <= 0 ||
+      slot.mode !== 'background' ||
+      !slot.context
+    ) {
       return;
     }
     const scheduledAtMs = slot.lastUsedAtMs;
@@ -381,10 +389,7 @@ export class BrowserSessionManager {
       const desiredChannel = this.getBrowserChannel();
 
       // Enforce exclusive profile ownership & channel consistency
-      if (
-        slot.context &&
-        (slot.mode !== 'background' || slot.channel !== desiredChannel)
-      ) {
+      if (slot.context && (slot.mode !== 'background' || slot.channel !== desiredChannel)) {
         await this.closeSlotLocked(slot);
       }
 

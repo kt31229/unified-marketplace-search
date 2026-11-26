@@ -108,8 +108,7 @@ export function formatLiveSmokeReport(
     const sample = res.sampleListing
       ? ` | sample: ${res.sampleListing.title} ($${res.sampleListing.price.toFixed(2)})`
       : '';
-    const dropped =
-      res.droppedMalformedCount > 0 ? `, dropped=${res.droppedMalformedCount}` : '';
+    const dropped = res.droppedMalformedCount > 0 ? `, dropped=${res.droppedMalformedCount}` : '';
     lines.push(
       `[${tag}] ${res.marketplace} (${res.runStatus}) — ${res.listingCount} Listings (${res.durationMs}ms${dropped})${sample}${safeMessage ? ` — ${safeMessage}` : ''}`,
     );
@@ -233,7 +232,9 @@ export function parseLiveSmokeArgs(
   }
 
   if (priceMin !== null && priceMax !== null && priceMin > priceMax) {
-    throw new Error(`Invalid price range: --price-min (${priceMin}) cannot exceed --price-max (${priceMax}).`);
+    throw new Error(
+      `Invalid price range: --price-min (${priceMin}) cannot exceed --price-max (${priceMax}).`,
+    );
   }
 
   const envOptIn =
@@ -326,9 +327,7 @@ function classifyRunStatus(runStatus: MarketplaceRunStatus): LiveSmokeOutcome {
  * Executes a single paced sequential diagnostic check across the requested Marketplaces
  * without automated login/2FA or secret/cookie logging.
  */
-export async function runLiveSmoke(
-  options: RunLiveSmokeOptions,
-): Promise<RunLiveSmokeOutput> {
+export async function runLiveSmoke(options: RunLiveSmokeOptions): Promise<RunLiveSmokeOutput> {
   const clock = options.clock ?? (() => Date.now());
   const sleep = options.sleep ?? defaultSmokeSleep;
   const pacingCooldownMs = options.pacingCooldownMs ?? DEFAULT_SMOKE_PACING_COOLDOWN_MS;
@@ -353,7 +352,8 @@ export async function runLiveSmoke(
         listingCount: 0,
         droppedMalformedCount: 0,
         durationMs: 0,
-        message: 'eBay credentials not configured (set EBAY_CLIENT_ID/EBAY_CLIENT_SECRET or save in Settings)',
+        message:
+          'eBay credentials not configured (set EBAY_CLIENT_ID/EBAY_CLIENT_SECRET or save in Settings)',
         sampleListing: null,
       });
       continue;

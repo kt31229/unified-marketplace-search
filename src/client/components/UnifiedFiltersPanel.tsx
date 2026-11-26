@@ -109,7 +109,10 @@ export function UnifiedFiltersPanel({
         <legend className="mb-1.5 text-xs font-semibold text-slate-700">Condition</legend>
         <div className="flex flex-col gap-1">
           {CONDITION_OPTIONS.map((opt) => (
-            <label key={opt.value} className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+            <label
+              key={opt.value}
+              className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={filters.conditions.includes(opt.value)}
@@ -126,7 +129,10 @@ export function UnifiedFiltersPanel({
         <legend className="mb-1.5 text-xs font-semibold text-slate-700">Fulfillment</legend>
         <div className="flex flex-col gap-1">
           {FULFILLMENT_OPTIONS.map((opt) => (
-            <label key={opt.value} className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+            <label
+              key={opt.value}
+              className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer"
+            >
               <input
                 type="radio"
                 name="fulfillment-mode"

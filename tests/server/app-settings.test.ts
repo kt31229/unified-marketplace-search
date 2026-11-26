@@ -47,7 +47,9 @@ describe('resolveDataDir', () => {
       platform: 'win32',
       homeDir: 'C:\\Users\\test',
     });
-    expect(resolved).toBe(path.join('C:\\Users\\test\\AppData\\Local', 'unified-marketplace-search'));
+    expect(resolved).toBe(
+      path.join('C:\\Users\\test\\AppData\\Local', 'unified-marketplace-search'),
+    );
   });
 
   it('uses XDG_DATA_HOME or ~/.local/share fallback on non-Windows', () => {
@@ -63,7 +65,9 @@ describe('resolveDataDir', () => {
       platform: 'linux',
       homeDir: '/home/test',
     });
-    expect(withoutXdg).toBe(path.join('/home/test', '.local', 'share', 'unified-marketplace-search'));
+    expect(withoutXdg).toBe(
+      path.join('/home/test', '.local', 'share', 'unified-marketplace-search'),
+    );
   });
 });
 

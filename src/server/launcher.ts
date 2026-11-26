@@ -109,9 +109,7 @@ export async function launchApp(options: LaunchAppOptions = {}): Promise<LaunchA
   }
 
   if (await probePortOpen(BIND_HOST, port)) {
-    throw new Error(
-      `Port ${port} on ${BIND_HOST} is already in use by another process.`,
-    );
+    throw new Error(`Port ${port} on ${BIND_HOST} is already in use by another process.`);
   }
 
   const spawnServer = options.spawnServer ?? defaultSpawnServer;
