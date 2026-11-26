@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import {
   DEFAULT_FACEBOOK_CITY_HUBS,
+  FACEBOOK_COOLDOWN_PROFILES,
   ListingSchema,
   type AppSettings,
   type ConditionTier,
   type FacebookCityHub,
+  type FacebookCooldownProfile,
   type Listing,
   type MarketplaceId,
   type MarketplaceRunStatus,
@@ -663,13 +665,11 @@ export class FacebookAdapter implements MarketplaceAdapter {
     this.challengeLatched = false;
   }
 
-  private computeCooldownMs(): number {
+  private computeCooldownMs(profile: FacebookCooldownProfile = 'conservative'): number {
+    const { minMs, maxMs } = FACEBOOK_COOLDOWN_PROFILES[profile];
     const raw = this.random();
     const clamped = Number.isFinite(raw) ? Math.min(0.999999, Math.max(0, raw)) : 0.5;
-    return (
-      FACEBOOK_MIN_COOLDOWN_MS +
-      Math.floor(clamped * (FACEBOOK_MAX_COOLDOWN_MS - FACEBOOK_MIN_COOLDOWN_MS + 1))
-    );
+    return minMs + Math.floor(clamped * (maxMs - minMs + 1));
   }
 
   translateFilters(
@@ -970,7 +970,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
       }
 
       if (i > 0) {
-        const cooldownMs = this.computeCooldownMs();
+        const cooldownMs = this.computeCooldownMs(context.settings.facebookCooldownProfile);
         try {
           await sleepFn(cooldownMs, context.signal);
         } catch {
@@ -1399,7 +1399,7 @@ export class FacebookAdapter implements MarketplaceAdapter {
       }
 
       if (i > 0) {
-        const cooldownMs = this.computeCooldownMs();
+        const cooldownMs = this.computeCooldownMs(context.settings.facebookCooldownProfile);
         try {
           await sleepFn(cooldownMs, context.signal);
         } catch {

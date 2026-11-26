@@ -1500,4 +1500,136 @@ describe('FacebookMarketplaceAdapter & hub sorting', () => {
     await bsm.shutdown();
     await bsm2.shutdown();
   });
+
+  it('applies balanced and fast cooldown profiles across executeInitial and loadMore', async () => {
+    const scripted = createScriptedFacebookTransport({
+      stepsByUrl: (url) => {
+        const hubSlug = new URL(url).pathname.split('/')[2] ?? 'seattle';
+        return {
+          html: wrapRelayHtml({
+            data: {
+              marketplace_search: {
+                feed_units: {
+                  edges: [
+                    {
+                      node: {
+                        listing: {
+                          id: `${hubSlug}-1`,
+                          marketplace_listing_title: `${hubSlug} item`,
+                          listing_price: { amount: '50.00' },
+                          is_sold: false,
+                          is_pending: false,
+                          delivery_types: ['IN_PERSON'],
+                          creation_time: 1732233600,
+                        },
+                      },
+                    },
+                  ],
+                  page_info: { end_cursor: `${hubSlug}-c1`, has_next_page: true },
+                },
+              },
+            },
+          }),
+        };
+      },
+      onScrollLoadMore: async (_callIndex, currentUrl) => {
+        const hubSlug = new URL(currentUrl).pathname.split('/')[2] ?? 'seattle';
+        return {
+          body: {
+            data: {
+              marketplace_search: {
+                feed_units: {
+                  edges: [
+                    {
+                      node: {
+                        listing: {
+                          id: `${hubSlug}-2`,
+                          marketplace_listing_title: `${hubSlug} page 2`,
+                          listing_price: { amount: '55.00' },
+                          is_sold: false,
+                          is_pending: false,
+                          delivery_types: ['IN_PERSON'],
+                          creation_time: 1732233600,
+                        },
+                      },
+                    },
+                  ],
+                  page_info: { end_cursor: null, has_next_page: false },
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+
+    const bsm = new BrowserSessionManager({
+      dataDir: createTempDir(),
+      getBrowserChannel: () => 'chrome',
+      transport: scripted.transport,
+    });
+
+    const filters = {
+      ...createDefaultUnifiedFilter(),
+      facebookLocationSlugs: ['seattle', 'sanfrancisco'],
+    };
+
+    const runWithProfile = async (
+      profile: 'balanced' | 'fast',
+      randomValue: number,
+      runLoadMore = false,
+    ) => {
+      const sleepCalls: number[] = [];
+      const adapter = createFacebookAdapter({
+        browserSessionManager: bsm,
+        sleep: async (ms) => {
+          sleepCalls.push(ms);
+        },
+        random: () => randomValue,
+      });
+      const settings = {
+        ...createDefaultAppSettings(),
+        facebookCooldownProfile: profile,
+      };
+      const context = makeContext({ settings });
+      const translation = adapter.translateFilters('bike', filters, 'relevance', context);
+      const initRes = await adapter.executeInitial({
+        keywords: 'bike',
+        unifiedFilters: filters,
+        sortOrder: 'relevance',
+        translation,
+        context,
+      });
+      const initialSleeps = [...sleepCalls];
+      sleepCalls.length = 0;
+
+      let loadMoreSleeps: number[] = [];
+      if (runLoadMore) {
+        await adapter.loadMore({
+          keywords: 'bike',
+          unifiedFilters: filters,
+          sortOrder: 'relevance',
+          translation,
+          context,
+          cursor: initRes.nextCursor,
+          page: 2,
+        });
+        loadMoreSleeps = [...sleepCalls];
+      }
+      return { initialSleeps, loadMoreSleeps };
+    };
+
+    expect((await runWithProfile('balanced', 0)).initialSleeps).toEqual([1500]);
+    expect((await runWithProfile('balanced', 0.999999)).initialSleeps).toEqual([3000]);
+
+    const fastMin = await runWithProfile('fast', 0, true);
+    expect(fastMin.initialSleeps).toEqual([1000]);
+    expect(fastMin.loadMoreSleeps).toEqual([1000]);
+
+    const fastMax = await runWithProfile('fast', 0.999999, true);
+    expect(fastMax.initialSleeps).toEqual([2500]);
+    expect(fastMax.loadMoreSleeps).toEqual([2500]);
+
+    await bsm.shutdown();
+  });
 });
