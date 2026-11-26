@@ -12,6 +12,7 @@
     "start": "node dist/server/index.js",
     "smoke:live": "tsx scripts/live-smoke.ts",
     "lint": "biome check --error-on-warnings src tests scripts",
+    "format": "biome format --write src tests scripts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
